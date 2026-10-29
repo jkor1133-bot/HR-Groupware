@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "updatedAt": "2026-10-28T00:00:00.000Z",
+  "members": [
+    { "id": "m1", "name": "김서연", "role": "인사팀 리더" },
+    { "id": "m2", "name": "박준호", "role": "채용 담당" },
+    { "id": "m3", "name": "이하늘", "role": "교육·온보딩" },
+    { "id": "m4", "name": "최민지", "role": "급여·복리후생" }
+  ],
+  "tasks": [
+    {
+      "id": "sample-1",
+      "weekId": "2026-10-27",
+      "ownerId": "m1",
+      "title": "주간 인사 운영 미팅 준비",
+      "description": "채용 파이프라인, 교육 일정, 이슈 공유 자료 정리",
+      "status": "in_progress",
+      "priority": "high",
+      "dueDay": "월",
+      "category": "운영",
+      "updatedAt": "2026-10-28T00:00:00.000Z"
+    },
+    {
+      "id": "sample-2",
+      "weekId": "2026-10-27",
+      "ownerId": "m2",
+      "title": "개발직군 서류 스크리닝",
+      "description": "이번 주 접수 지원서 1차 검토 및 면접 후보 선별",
+      "status": "planned",
+      "priority": "high",
+      "dueDay": "화",
+      "category": "채용",
+      "updatedAt": "2026-10-28T00:00:00.000Z"
+    }
+  ]
+}

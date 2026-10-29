@@ -1,0 +1,11 @@
+{
+  "name": "hr-dashboard-workspace",
+  "private": true,
+  "description": "루트에서 npm run dev 해도 안쪽 HR_dashboard 앱이 실행되도록 하는 래퍼",
+  "scripts": {
+    "dev": "npm run dev --prefix HR_dashboard",
+    "build": "npm run build --prefix HR_dashboard",
+    "start": "npm run start --prefix HR_dashboard",
+    "lint": "npm run lint --prefix HR_dashboard"
+  }
+}
