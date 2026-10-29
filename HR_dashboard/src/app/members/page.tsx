@@ -27,23 +27,46 @@ const STATUS_META: Record<
     label: "활성",
     className:
       "border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200",
-    hint: "이메일이 있고 앱에서 바로 쓰는 상태",
+    hint: "계정 연동 완료 · 해당 이메일로 쓰는 상태",
   },
   invited: {
     label: "초대됨",
     className:
       "border-sky-300 bg-sky-50 text-sky-900 dark:bg-sky-950/40 dark:text-sky-200",
-    hint: "이메일을 넣었고, 가입 안내를 보낼 예정",
+    hint: "이메일은 넣었고, 아직 연동 전(연동 준비)",
   },
   pending: {
     label: "가입 대기",
     className:
       "border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
-    hint: "명단만 등록됨 · 아직 가입 연동 전",
+    hint: "명단만 등록 · 이메일 없음(미연동)",
   },
 };
 
-function hasLinkedEmail(m: Pick<TeamMember, "email">) {
+type AccountLinkKind = "unlinked" | "ready" | "linked";
+
+const LINK_META: Record<
+  AccountLinkKind,
+  { label: string; className: string }
+> = {
+  unlinked: {
+    label: "미연동",
+    className:
+      "border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
+  },
+  ready: {
+    label: "연동 준비",
+    className:
+      "border-sky-300 bg-sky-50 text-sky-900 dark:bg-sky-950/40 dark:text-sky-200",
+  },
+  linked: {
+    label: "연동",
+    className:
+      "border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200",
+  },
+};
+
+function hasEmail(m: Pick<TeamMember, "email">) {
   return Boolean((m.email ?? "").trim());
 }
 
@@ -51,12 +74,23 @@ function resolveStatus(
   email: string,
   status: MemberStatus,
 ): MemberStatus {
-  const linked = Boolean(email.trim());
+  const withEmail = Boolean(email.trim());
   // 이메일 없으면 활성/초대 불가 → 가입 대기
-  if (!linked && status !== "pending") return "pending";
-  // 이메일 있는데 가입 대기만 남아 있으면 초대됨으로
-  if (linked && status === "pending") return "invited";
+  if (!withEmail && status !== "pending") return "pending";
+  // 이메일 있는데 가입 대기만 남아 있으면 초대됨(연동 준비)
+  if (withEmail && status === "pending") return "invited";
   return status;
+}
+
+/** 이메일 + 상태 → 계정 연동 표시 */
+function accountLinkKind(
+  email: string,
+  status: MemberStatus,
+): AccountLinkKind {
+  const resolved = resolveStatus(email, status);
+  if (!email.trim()) return "unlinked";
+  if (resolved === "active") return "linked";
+  return "ready";
 }
 
 type FormState = {
@@ -98,19 +132,24 @@ export default function MembersPage() {
   }, [members, query]);
 
   const stats = useMemo(() => {
-    const unlinked = members.filter((m) => !hasLinkedEmail(m)).length;
-    const linked = members.length - unlinked;
-    const pending = members.filter(
-      (m) => (m.status ?? "pending") === "pending",
-    ).length;
-    const invited = members.filter((m) => m.status === "invited").length;
-    const active = members.filter((m) => m.status === "active").length;
-    return { unlinked, linked, pending, invited, active };
+    let unlinked = 0;
+    let ready = 0;
+    let linked = 0;
+    for (const m of members) {
+      const kind = accountLinkKind(
+        m.email ?? "",
+        m.status ?? "pending",
+      );
+      if (kind === "unlinked") unlinked += 1;
+      else if (kind === "ready") ready += 1;
+      else linked += 1;
+    }
+    return { unlinked, ready, linked };
   }, [members]);
 
   const editing = form.id !== null;
   const canEditPermissions = viewerIsAdmin;
-  const formLinked = Boolean(form.email.trim());
+  const formHasEmail = Boolean(form.email.trim());
 
   function startEdit(m: TeamMember) {
     setFormError("");
@@ -229,10 +268,13 @@ export default function MembersPage() {
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             인사총무팀 <span className="font-medium text-foreground">명단</span>
-            을 등록합니다. 이메일은 나중에 회원가입과 맞출 칸이고, 없어도
-            담당자로 쓸 수 있습니다. 이메일이 없으면{" "}
-            <span className="font-medium text-foreground">미연동 · 가입 대기</span>
-            로 표시됩니다.
+            을 등록합니다. 이메일 없음=
+            <span className="font-medium text-foreground">미연동</span>, 이메일만
+            넣음=
+            <span className="font-medium text-foreground">연동 준비</span>,
+            상태를 「활성」으로 바꾸면=
+            <span className="font-medium text-foreground">연동</span>
+            입니다. (나중에 가입 로그인과 자동 연결할 예정)
           </p>
         </div>
         <Button
@@ -264,12 +306,11 @@ export default function MembersPage() {
         <span className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
           미연동 {stats.unlinked}
         </span>
-        <span className="rounded-md border border-border bg-card px-2.5 py-1 text-muted-foreground">
-          연동 준비 {stats.linked}
+        <span className="rounded-md border border-sky-200 bg-sky-50 px-2.5 py-1 text-sky-900 dark:border-sky-900/50 dark:bg-sky-950/40 dark:text-sky-200">
+          연동 준비 {stats.ready}
         </span>
-        <span className="rounded-md border border-border bg-card px-2.5 py-1 text-muted-foreground">
-          가입 대기 {stats.pending} · 초대됨 {stats.invited} · 활성{" "}
-          {stats.active}
+        <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200">
+          연동 {stats.linked}
         </span>
       </div>
 
@@ -321,18 +362,18 @@ export default function MembersPage() {
                 onChange={(e) => onEmailChange(e.target.value)}
               />
               <p className="text-[11px] text-muted-foreground">
-                {formLinked
-                  ? "이메일이 있으면 나중에 회원가입과 연결할 수 있습니다."
-                  : "비워 두면 미연동(명단만 등록). 업무 담당으로는 그대로 쓸 수 있습니다."}
+                {formHasEmail
+                  ? "이메일을 넣으면 「연동 준비」가 됩니다. 연동 완료 시 상태를 활성으로 바꾸세요."
+                  : "비워 두면 미연동(명단만). 업무 담당으로는 그대로 쓸 수 있습니다."}
               </p>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="member-status">상태</Label>
+              <Label htmlFor="member-status">상태 · 계정 연동</Label>
               <select
                 id="member-status"
                 className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm disabled:opacity-60"
                 value={form.status}
-                disabled={!formLinked}
+                disabled={!formHasEmail}
                 onChange={(e) =>
                   setForm((f) => ({
                     ...f,
@@ -340,18 +381,18 @@ export default function MembersPage() {
                   }))
                 }
               >
-                <option value="pending">가입 대기 — 명단만</option>
-                <option value="invited" disabled={!formLinked}>
-                  초대됨 — 가입 안내 예정
+                <option value="pending">가입 대기 — 미연동</option>
+                <option value="invited" disabled={!formHasEmail}>
+                  초대됨 — 연동 준비
                 </option>
-                <option value="active" disabled={!formLinked}>
-                  활성 — 연동 후 사용
+                <option value="active" disabled={!formHasEmail}>
+                  활성 — 연동 완료
                 </option>
               </select>
               <p className="text-[11px] text-muted-foreground">
-                {formLinked
-                  ? STATUS_META[form.status].hint
-                  : "이메일이 없으면 자동으로 「가입 대기」입니다."}
+                {formHasEmail
+                  ? `${STATUS_META[form.status].hint} → 계정 연동: ${LINK_META[accountLinkKind(form.email, form.status)].label}`
+                  : "이메일이 없으면 자동으로 「가입 대기 · 미연동」입니다."}
               </p>
             </div>
 
@@ -448,11 +489,12 @@ export default function MembersPage() {
                   </tr>
                 ) : (
                   filtered.map((m) => {
-                    const linked = hasLinkedEmail(m);
+                    const email = m.email ?? "";
                     const status = resolveStatus(
-                      m.email ?? "",
+                      email,
                       m.status ?? "pending",
                     );
+                    const link = LINK_META[accountLinkKind(email, status)];
                     const meta = STATUS_META[status];
                     const menus = m.isAdmin
                       ? ALL_MENU_HREFS
@@ -472,22 +514,21 @@ export default function MembersPage() {
                           {m.role}
                         </td>
                         <td className="px-3 py-3 text-xs text-muted-foreground">
-                          {linked ? (
+                          {email.trim() ? (
                             <span className="text-foreground">{m.email}</span>
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
                         </td>
                         <td className="px-3 py-3">
-                          {linked ? (
-                            <span className="inline-flex rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
-                              연동 준비
-                            </span>
-                          ) : (
-                            <span className="inline-flex rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-                              미연동
-                            </span>
-                          )}
+                          <span
+                            className={cn(
+                              "inline-flex rounded border px-2 py-0.5 text-[11px] font-medium",
+                              link.className,
+                            )}
+                          >
+                            {link.label}
+                          </span>
                         </td>
                         <td className="px-3 py-3">
                           {m.isAdmin ? (
@@ -616,9 +657,7 @@ export default function MembersPage() {
                         <p className="font-medium text-foreground">{m.name}</p>
                         <p className="text-[11px] text-muted-foreground">
                           {m.role}
-                          {hasLinkedEmail(m)
-                            ? ` · ${m.email}`
-                            : " · 미연동"}
+                          {` · ${LINK_META[accountLinkKind(m.email ?? "", m.status ?? "pending")].label}`}
                         </p>
                       </td>
                       <td className="px-2 py-2.5 text-center">
