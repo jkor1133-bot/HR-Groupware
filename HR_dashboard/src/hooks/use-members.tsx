@@ -17,19 +17,24 @@ import {
 } from "@/lib/app-menus";
 import type { TeamMember } from "@/lib/types";
 
-/** v3: 이대현 관리자 + 메뉴 권한 시드 재적용 */
-const STORAGE_KEY = "hr-dashboard-members-v3";
+/** v4: 이메일 미연동 → 가입 대기 상태 보정 */
+const STORAGE_KEY = "hr-dashboard-members-v4";
 const LEGACY_KEYS = [
+  "hr-dashboard-members-v3",
   "hr-dashboard-members-v2",
   "hr-dashboard-members-v1",
 ];
 
 function normalize(m: TeamMember): TeamMember {
   const isAdmin = Boolean(m.isAdmin);
+  const email = (m.email ?? "").trim();
+  const status =
+    m.status ??
+    (email ? "active" : "pending");
   return {
     ...m,
-    email: m.email ?? "",
-    status: m.status ?? "active",
+    email,
+    status,
     createdAt: m.createdAt ?? new Date().toISOString(),
     isAdmin,
     allowedMenus: isAdmin
@@ -38,6 +43,17 @@ function normalize(m: TeamMember): TeamMember {
           m.allowedMenus?.length ? m.allowedMenus : DEFAULT_MEMBER_MENUS,
         ),
   };
+}
+
+/** 이메일이 없는데 활성으로만 남아 있던 시드 명단 → 가입 대기로 */
+function applyLinkStatusMigration(list: TeamMember[]): TeamMember[] {
+  return list.map((m) => {
+    const email = (m.email ?? "").trim();
+    if (!email && (m.status ?? "active") === "active") {
+      return normalize({ ...m, email: "", status: "pending" });
+    }
+    return normalize(m);
+  });
 }
 
 /** 시드 기준으로 관리자·기본 메뉴를 보정 (이대현=관리자) */
@@ -71,12 +87,10 @@ function load(): TeamMember[] {
     if (!Array.isArray(parsed) || parsed.length === 0) {
       return SEED_MEMBERS.map(normalize);
     }
-    // v3 키가 없으면 시드 권한으로 한 번 보정
-    const hasV3 = Boolean(window.localStorage.getItem(STORAGE_KEY));
-    const next = hasV3
-      ? parsed.map(normalize)
-      : applySeedPermissions(parsed);
-    return next;
+    const hasCurrent = Boolean(window.localStorage.getItem(STORAGE_KEY));
+    if (hasCurrent) return parsed.map(normalize);
+    // 구버전: 메뉴 권한 시드 보정 + 이메일 없는 활성 → 가입 대기
+    return applyLinkStatusMigration(applySeedPermissions(parsed));
   } catch {
     return SEED_MEMBERS.map(normalize);
   }

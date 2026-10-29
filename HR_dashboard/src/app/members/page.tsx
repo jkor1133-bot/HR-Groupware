@@ -21,24 +21,43 @@ const ROLES = ["팀장", "대리", "주임", "사원", "과장", "차장", "부�
 
 const STATUS_META: Record<
   MemberStatus,
-  { label: string; className: string }
+  { label: string; className: string; hint: string }
 > = {
   active: {
     label: "활성",
     className:
       "border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200",
+    hint: "이메일이 있고 앱에서 바로 쓰는 상태",
   },
   invited: {
     label: "초대됨",
     className:
       "border-sky-300 bg-sky-50 text-sky-900 dark:bg-sky-950/40 dark:text-sky-200",
+    hint: "이메일을 넣었고, 가입 안내를 보낼 예정",
   },
   pending: {
     label: "가입 대기",
     className:
       "border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
+    hint: "명단만 등록됨 · 아직 가입 연동 전",
   },
 };
+
+function hasLinkedEmail(m: Pick<TeamMember, "email">) {
+  return Boolean((m.email ?? "").trim());
+}
+
+function resolveStatus(
+  email: string,
+  status: MemberStatus,
+): MemberStatus {
+  const linked = Boolean(email.trim());
+  // 이메일 없으면 활성/초대 불가 → 가입 대기
+  if (!linked && status !== "pending") return "pending";
+  // 이메일 있는데 가입 대기만 남아 있으면 초대됨으로
+  if (linked && status === "pending") return "invited";
+  return status;
+}
 
 type FormState = {
   id: string | null;
@@ -55,7 +74,7 @@ const emptyForm = (): FormState => ({
   name: "",
   role: "사원",
   email: "",
-  status: "active",
+  status: "pending",
   isAdmin: false,
   allowedMenus: [...DEFAULT_MEMBER_MENUS],
 });
@@ -65,6 +84,7 @@ export default function MembersPage() {
   const { isAdmin: viewerIsAdmin } = useCurrentUser();
   const [form, setForm] = useState<FormState>(emptyForm());
   const [query, setQuery] = useState("");
+  const [formError, setFormError] = useState("");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -77,22 +97,36 @@ export default function MembersPage() {
     );
   }, [members, query]);
 
+  const stats = useMemo(() => {
+    const unlinked = members.filter((m) => !hasLinkedEmail(m)).length;
+    const linked = members.length - unlinked;
+    const pending = members.filter(
+      (m) => (m.status ?? "pending") === "pending",
+    ).length;
+    const invited = members.filter((m) => m.status === "invited").length;
+    const active = members.filter((m) => m.status === "active").length;
+    return { unlinked, linked, pending, invited, active };
+  }, [members]);
+
   const editing = form.id !== null;
   const canEditPermissions = viewerIsAdmin;
+  const formLinked = Boolean(form.email.trim());
 
   function startEdit(m: TeamMember) {
+    setFormError("");
     setForm({
       id: m.id,
       name: m.name,
       role: m.role,
       email: m.email ?? "",
-      status: m.status ?? "active",
+      status: m.status ?? "pending",
       isAdmin: Boolean(m.isAdmin),
       allowedMenus: ensureHomeMenu(m.allowedMenus),
     });
   }
 
   function cancelEdit() {
+    setFormError("");
     setForm(emptyForm());
   }
 
@@ -110,9 +144,40 @@ export default function MembersPage() {
     });
   }
 
+  function onEmailChange(value: string) {
+    setFormError("");
+    setForm((f) => {
+      const prevLinked = Boolean(f.email.trim());
+      const nextLinked = Boolean(value.trim());
+      let status = f.status;
+      if (!nextLinked) status = "pending";
+      else if (!prevLinked && nextLinked && status === "pending") {
+        status = "invited";
+      }
+      return { ...f, email: value, status };
+    });
+  }
+
   function save() {
     const name = form.name.trim();
-    if (!name) return;
+    if (!name) {
+      setFormError("이름을 입력하세요.");
+      return;
+    }
+    const email = form.email.trim().toLowerCase();
+    if (email) {
+      const dup = members.find(
+        (m) =>
+          m.id !== form.id &&
+          (m.email ?? "").trim().toLowerCase() === email,
+      );
+      if (dup) {
+        setFormError(`이미 ${dup.name}에게 등록된 이메일입니다.`);
+        return;
+      }
+    }
+
+    const status = resolveStatus(email, form.status);
     const now = new Date().toISOString();
     const existing = form.id
       ? members.find((m) => m.id === form.id)
@@ -131,12 +196,13 @@ export default function MembersPage() {
       id: form.id ?? `m-${Date.now()}`,
       name,
       role: form.role.trim() || "사원",
-      email: form.email.trim(),
-      status: form.status,
+      email,
+      status,
       createdAt: existing?.createdAt ?? now,
       isAdmin: nextIsAdmin,
       allowedMenus: nextMenus,
     });
+    setFormError("");
     setForm(emptyForm());
   }
 
@@ -161,10 +227,12 @@ export default function MembersPage() {
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             담당자 등록
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            인사총무팀 담당자를 등록합니다. 아래{" "}
-            <span className="font-medium text-foreground">메뉴 권한 지정</span>
-            표에서 개인별로 볼 수 있는 사이드 메뉴를 체크하세요.
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            인사총무팀 <span className="font-medium text-foreground">명단</span>
+            을 등록합니다. 이메일은 나중에 회원가입과 맞출 칸이고, 없어도
+            담당자로 쓸 수 있습니다. 이메일이 없으면{" "}
+            <span className="font-medium text-foreground">미연동 · 가입 대기</span>
+            로 표시됩니다.
           </p>
         </div>
         <Button
@@ -174,17 +242,35 @@ export default function MembersPage() {
           onClick={() => {
             if (
               window.confirm(
-                "기본 담당자 5명으로 초기화할까요? (관리자: 이대현)",
+                "기본 담당자 5명으로 초기화할까요? (관리자: 이대현, 이메일 미연동)",
               )
             ) {
               resetToSeed();
               setForm(emptyForm());
+              setFormError("");
             }
           }}
         >
           <RotateCcw className="size-3.5" />
           기본 인원으로 초기화
         </Button>
+      </div>
+
+      <div className="flex flex-wrap gap-2 text-xs">
+        <span className="rounded-md border border-border bg-card px-2.5 py-1 text-muted-foreground">
+          전체{" "}
+          <span className="font-semibold text-foreground">{members.length}</span>
+        </span>
+        <span className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
+          미연동 {stats.unlinked}
+        </span>
+        <span className="rounded-md border border-border bg-card px-2.5 py-1 text-muted-foreground">
+          연동 준비 {stats.linked}
+        </span>
+        <span className="rounded-md border border-border bg-card px-2.5 py-1 text-muted-foreground">
+          가입 대기 {stats.pending} · 초대됨 {stats.invited} · 활성{" "}
+          {stats.active}
+        </span>
       </div>
 
       <div className="grid gap-5 @lg/app:grid-cols-[minmax(0,24rem)_1fr]">
@@ -199,9 +285,10 @@ export default function MembersPage() {
                 id="member-name"
                 value={form.name}
                 placeholder="예: 김재선"
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, name: e.target.value }))
-                }
+                onChange={(e) => {
+                  setFormError("");
+                  setForm((f) => ({ ...f, name: e.target.value }));
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") save();
                 }}
@@ -231,17 +318,21 @@ export default function MembersPage() {
                 type="email"
                 value={form.email}
                 placeholder="예: name@dhflour.com"
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, email: e.target.value }))
-                }
+                onChange={(e) => onEmailChange(e.target.value)}
               />
+              <p className="text-[11px] text-muted-foreground">
+                {formLinked
+                  ? "이메일이 있으면 나중에 회원가입과 연결할 수 있습니다."
+                  : "비워 두면 미연동(명단만 등록). 업무 담당으로는 그대로 쓸 수 있습니다."}
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="member-status">상태</Label>
               <select
                 id="member-status"
-                className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+                className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm disabled:opacity-60"
                 value={form.status}
+                disabled={!formLinked}
                 onChange={(e) =>
                   setForm((f) => ({
                     ...f,
@@ -249,10 +340,19 @@ export default function MembersPage() {
                   }))
                 }
               >
-                <option value="active">활성 — 사용 가능</option>
-                <option value="invited">초대됨 — 가입 안내 예정</option>
-                <option value="pending">가입 대기 — 승인 필요</option>
+                <option value="pending">가입 대기 — 명단만</option>
+                <option value="invited" disabled={!formLinked}>
+                  초대됨 — 가입 안내 예정
+                </option>
+                <option value="active" disabled={!formLinked}>
+                  활성 — 연동 후 사용
+                </option>
               </select>
+              <p className="text-[11px] text-muted-foreground">
+                {formLinked
+                  ? STATUS_META[form.status].hint
+                  : "이메일이 없으면 자동으로 「가입 대기」입니다."}
+              </p>
             </div>
 
             <div
@@ -289,6 +389,10 @@ export default function MembersPage() {
               </p>
             </div>
 
+            {formError ? (
+              <p className="text-xs font-medium text-dh-red">{formError}</p>
+            ) : null}
+
             <div className="flex gap-2 pt-1">
               <Button type="button" className="flex-1" onClick={save}>
                 <Plus className="size-3.5" />
@@ -319,11 +423,13 @@ export default function MembersPage() {
             />
           </div>
           <div className="overflow-x-auto">
-            <table className="gw-data-table w-full min-w-[40rem] text-sm">
+            <table className="gw-data-table w-full min-w-[48rem] text-sm">
               <thead className="bg-muted/50 text-xs text-muted-foreground">
                 <tr>
                   <th className="px-4 py-2.5 font-medium">이름</th>
                   <th className="px-3 py-2.5 font-medium">직급</th>
+                  <th className="px-3 py-2.5 font-medium">이메일</th>
+                  <th className="px-3 py-2.5 font-medium">계정 연동</th>
                   <th className="px-3 py-2.5 font-medium">권한</th>
                   <th className="px-3 py-2.5 font-medium">메뉴</th>
                   <th className="px-3 py-2.5 font-medium">상태</th>
@@ -334,7 +440,7 @@ export default function MembersPage() {
                 {filtered.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={8}
                       className="px-4 py-10 text-center text-muted-foreground"
                     >
                       등록된 담당자가 없습니다. 왼쪽에서 추가하세요.
@@ -342,7 +448,11 @@ export default function MembersPage() {
                   </tr>
                 ) : (
                   filtered.map((m) => {
-                    const status = m.status ?? "active";
+                    const linked = hasLinkedEmail(m);
+                    const status = resolveStatus(
+                      m.email ?? "",
+                      m.status ?? "pending",
+                    );
                     const meta = STATUS_META[status];
                     const menus = m.isAdmin
                       ? ALL_MENU_HREFS
@@ -361,6 +471,24 @@ export default function MembersPage() {
                         <td className="px-3 py-3 text-muted-foreground">
                           {m.role}
                         </td>
+                        <td className="px-3 py-3 text-xs text-muted-foreground">
+                          {linked ? (
+                            <span className="text-foreground">{m.email}</span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-3">
+                          {linked ? (
+                            <span className="inline-flex rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+                              연동 준비
+                            </span>
+                          ) : (
+                            <span className="inline-flex rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                              미연동
+                            </span>
+                          )}
+                        </td>
                         <td className="px-3 py-3">
                           {m.isAdmin ? (
                             <span className="inline-flex items-center gap-1 rounded border border-dh-sea/30 bg-dh-sea/10 px-2 py-0.5 text-[11px] font-medium text-dh-deep dark:text-dh-light">
@@ -374,9 +502,7 @@ export default function MembersPage() {
                           )}
                         </td>
                         <td className="px-3 py-3 text-xs text-muted-foreground">
-                          {m.isAdmin
-                            ? "전체"
-                            : `${menus.length}개`}
+                          {m.isAdmin ? "전체" : `${menus.length}개`}
                         </td>
                         <td className="px-3 py-3">
                           <span
@@ -490,6 +616,9 @@ export default function MembersPage() {
                         <p className="font-medium text-foreground">{m.name}</p>
                         <p className="text-[11px] text-muted-foreground">
                           {m.role}
+                          {hasLinkedEmail(m)
+                            ? ` · ${m.email}`
+                            : " · 미연동"}
                         </p>
                       </td>
                       <td className="px-2 py-2.5 text-center">

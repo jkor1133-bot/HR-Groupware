@@ -7,8 +7,9 @@ export type TeamMember = {
   id: string;
   name: string;
   role: string;
-  /** 향후 회원가입·로그인 연동용 */
+  /** 회원가입·로그인 연동용. 비어 있으면 미연동(명단만) */
   email?: string;
+  /** active=연동 후 사용, invited=이메일 등록·초대, pending=명단만·가입 대기 */
   status?: MemberStatus;
   createdAt?: string;
   /** 시스템 관리자 권한 (메뉴 지정 등) */

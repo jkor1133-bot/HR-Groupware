@@ -6,13 +6,14 @@ import type { TeamMember, WeeklyTask } from "@/lib/types";
 import { addDays, formatYmd, weekIdFromDate, shiftWeek } from "@/lib/week";
 
 /** 인사총무팀 기본 담당자 (HR Dashboard 등록 시드) */
+/** 이메일은 가입 연동용. 비어 있으면 명단만 등록된 상태(가입 대기). */
 export const SEED_MEMBERS: TeamMember[] = [
   {
     id: "m1",
     name: "김재선",
     role: "팀장",
     email: "",
-    status: "active",
+    status: "pending",
     isAdmin: false,
     allowedMenus: [...DEFAULT_MEMBER_MENUS],
   },
@@ -21,7 +22,7 @@ export const SEED_MEMBERS: TeamMember[] = [
     name: "이대현",
     role: "대리",
     email: "",
-    status: "active",
+    status: "pending",
     isAdmin: true,
     allowedMenus: [...ALL_MENU_HREFS],
   },
@@ -30,7 +31,7 @@ export const SEED_MEMBERS: TeamMember[] = [
     name: "김연경",
     role: "대리",
     email: "",
-    status: "active",
+    status: "pending",
     isAdmin: false,
     allowedMenus: [...DEFAULT_MEMBER_MENUS],
   },
@@ -39,7 +40,7 @@ export const SEED_MEMBERS: TeamMember[] = [
     name: "이선미",
     role: "주임",
     email: "",
-    status: "active",
+    status: "pending",
     isAdmin: false,
     allowedMenus: [...DEFAULT_MEMBER_MENUS],
   },
@@ -48,7 +49,7 @@ export const SEED_MEMBERS: TeamMember[] = [
     name: "이정훈",
     role: "사원",
     email: "",
-    status: "active",
+    status: "pending",
     isAdmin: false,
     allowedMenus: [...DEFAULT_MEMBER_MENUS],
   },
