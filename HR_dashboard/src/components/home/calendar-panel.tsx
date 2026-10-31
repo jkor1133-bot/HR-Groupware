@@ -98,7 +98,7 @@ export function CalendarPanel() {
             Calendar · 일정 / 오늘 할 일
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            칸 안에 시간·제목 표시 · Calendar 페이지와 연동
+            직접 입력한 일정만 표시 · 주간업무 기한은 Calendar 페이지에서 확인
           </p>
         </div>
         <div className="flex items-center gap-2">

@@ -1,14 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
-  CheckCircle2,
-  CircleDashed,
-  Clock3,
+  FileText,
+  History,
+  Paperclip,
   Plus,
   RotateCcw,
   Trash2,
-  TriangleAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,53 +22,97 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useMembers } from "@/hooks/use-members";
 import { useWorkflows } from "@/hooks/use-workflows";
-import type { WorkflowProcess, WorkflowStatus, WorkflowStep } from "@/lib/types";
+import type {
+  WorkflowAttachment,
+  WorkflowDomain,
+  WorkflowProcess,
+  WorkflowStandardChange,
+  WorkflowStep,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const STATUS_META: Record<
-  WorkflowStatus,
-  { label: string; className: string; Icon: typeof CheckCircle2 }
-> = {
-  done: {
-    label: "완료",
-    className: "border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200",
-    Icon: CheckCircle2,
-  },
-  in_progress: {
-    label: "진행",
-    className: "border-sky-300 bg-sky-50 text-sky-900 dark:bg-sky-950/40 dark:text-sky-200",
-    Icon: Clock3,
-  },
-  delayed: {
-    label: "지연",
-    className: "border-red-300 bg-red-50 text-dh-red dark:bg-red-950/40",
-    Icon: TriangleAlert,
-  },
-  planned: {
-    label: "예정",
-    className: "border-border bg-muted text-muted-foreground",
-    Icon: CircleDashed,
-  },
-};
+const DOMAIN_TABS: { id: WorkflowDomain; label: string }[] = [
+  { id: "hr", label: "인사" },
+  { id: "ga", label: "총무" },
+  { id: "planning", label: "기획" },
+];
 
-function emptyProcess(defaultOwnerId: string): WorkflowProcess {
+const MAX_FILE_BYTES = 2 * 1024 * 1024;
+
+function emptyStep(defaultOwnerId: string, stage = 1): WorkflowStep {
+  return {
+    id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    title: "",
+    ownerId: defaultOwnerId,
+    dueLabel: "",
+    stage,
+    standardLabel: "",
+    attachments: [],
+    changeHistory: [],
+  };
+}
+
+function emptyProcess(
+  defaultOwnerId: string,
+  domain: WorkflowDomain,
+): WorkflowProcess {
   const stamp = Date.now();
   return {
     id: `wf-${stamp}`,
     name: "",
+    domain,
     category: "일반",
     description: "",
     updatedAt: new Date().toISOString(),
-    steps: [
-      {
-        id: `s-${stamp}-1`,
-        title: "",
-        ownerId: defaultOwnerId,
-        dueLabel: "D-Day",
-        status: "planned",
-        stage: 1,
-      },
-    ],
+    steps: [emptyStep(defaultOwnerId, 1)],
+  };
+}
+
+function emptyChangeDraft(): Omit<WorkflowStandardChange, "id" | "createdAt"> {
+  return {
+    changedAt: new Date().toISOString().slice(0, 10),
+    fromLabel: "",
+    toLabel: "",
+    reason: "",
+  };
+}
+
+function formatBytes(n: number) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function readFileAsAttachment(file: File): Promise<WorkflowAttachment> {
+  return new Promise((resolve, reject) => {
+    if (file.size > MAX_FILE_BYTES) {
+      reject(
+        new Error(`파일은 ${formatBytes(MAX_FILE_BYTES)} 이하만 가능합니다.`),
+      );
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      resolve({
+        id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: file.name,
+        mimeType: file.type || "application/octet-stream",
+        size: file.size,
+        dataUrl: String(reader.result ?? ""),
+        uploadedAt: new Date().toISOString(),
+      });
+    };
+    reader.onerror = () => reject(new Error("파일을 읽지 못했습니다."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function normalizeStep(s: WorkflowStep): WorkflowStep {
+  return {
+    ...s,
+    standardLabel: s.standardLabel ?? "",
+    attachments: s.attachments ?? [],
+    changeHistory: s.changeHistory ?? [],
   };
 }
 
@@ -77,8 +120,17 @@ export function WorkflowBoard() {
   const { members } = useMembers();
   const { hydrated, processes, upsertProcess, deleteProcess, resetToSeed } =
     useWorkflows();
-  const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<WorkflowProcess | null>(null);
+  const [domain, setDomain] = useState<WorkflowDomain>("hr");
+  const [processOpen, setProcessOpen] = useState(false);
+  const [processDraft, setProcessDraft] = useState<WorkflowProcess | null>(
+    null,
+  );
+  const [stepOpen, setStepOpen] = useState(false);
+  const [stepProcessId, setStepProcessId] = useState<string | null>(null);
+  const [stepDraft, setStepDraft] = useState<WorkflowStep | null>(null);
+  const [changeDraft, setChangeDraft] = useState(emptyChangeDraft());
+  const [fileError, setFileError] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
   const defaultOwnerId = members[0]?.id ?? "m1";
 
   const memberMap = useMemo(
@@ -86,57 +138,110 @@ export function WorkflowBoard() {
     [members],
   );
 
-  const stats = useMemo(() => {
-    const steps = processes.flatMap((p) => p.steps);
-    const done = steps.filter((s) => s.status === "done").length;
-    const delayed = steps.filter((s) => s.status === "delayed").length;
-    const inProgress = steps.filter((s) => s.status === "in_progress").length;
-    return {
-      total: steps.length,
-      done,
-      delayed,
-      inProgress,
-      rate: steps.length ? Math.round((done / steps.length) * 100) : 0,
-    };
-  }, [processes]);
+  const filtered = useMemo(
+    () => processes.filter((p) => (p.domain ?? "hr") === domain),
+    [processes, domain],
+  );
 
-  function openCreate() {
-    setDraft(emptyProcess(defaultOwnerId));
-    setOpen(true);
+  function openCreateProcess() {
+    setProcessDraft(emptyProcess(defaultOwnerId, domain));
+    setProcessOpen(true);
   }
 
-  function openEdit(process: WorkflowProcess) {
-    setDraft(JSON.parse(JSON.stringify(process)) as WorkflowProcess);
-    setOpen(true);
+  function openEditProcess(process: WorkflowProcess) {
+    setProcessDraft(JSON.parse(JSON.stringify(process)) as WorkflowProcess);
+    setProcessOpen(true);
   }
 
-  function addStep() {
-    if (!draft) return;
+  function openEditStep(process: WorkflowProcess, step: WorkflowStep) {
+    setStepProcessId(process.id);
+    setStepDraft(normalizeStep(JSON.parse(JSON.stringify(step)) as WorkflowStep));
+    setChangeDraft({
+      ...emptyChangeDraft(),
+      fromLabel: step.standardLabel ?? "",
+    });
+    setFileError("");
+    setStepOpen(true);
+  }
+
+  function addProcessStep() {
+    if (!processDraft) return;
     const stage =
-      Math.max(0, ...draft.steps.map((s) => s.stage)) + 1 || 1;
-    const step: WorkflowStep = {
-      id: `s-${Date.now()}`,
-      title: "",
-      ownerId: defaultOwnerId,
-      dueLabel: "",
-      status: "planned",
-      stage,
-    };
-    setDraft({ ...draft, steps: [...draft.steps, step] });
+      Math.max(0, ...processDraft.steps.map((s) => s.stage)) + 1 || 1;
+    setProcessDraft({
+      ...processDraft,
+      steps: [...processDraft.steps, emptyStep(defaultOwnerId, stage)],
+    });
   }
 
-  function save() {
-    if (!draft || !draft.name.trim()) return;
-    const cleaned = {
-      ...draft,
-      name: draft.name.trim(),
-      description: draft.description.trim(),
-      steps: draft.steps.filter((s) => s.title.trim()),
+  function saveProcess() {
+    if (!processDraft || !processDraft.name.trim()) return;
+    const cleaned: WorkflowProcess = {
+      ...processDraft,
+      name: processDraft.name.trim(),
+      description: processDraft.description.trim(),
+      category: processDraft.category.trim() || "일반",
+      steps: processDraft.steps
+        .filter((s) => s.title.trim())
+        .map(normalizeStep),
       updatedAt: new Date().toISOString(),
     };
     if (cleaned.steps.length === 0) return;
     upsertProcess(cleaned);
-    setOpen(false);
+    setProcessOpen(false);
+  }
+
+  async function onPickFiles(files: FileList | null) {
+    if (!stepDraft || !files?.length) return;
+    setFileError("");
+    try {
+      const next: WorkflowAttachment[] = [...(stepDraft.attachments ?? [])];
+      for (const file of Array.from(files)) {
+        next.push(await readFileAsAttachment(file));
+      }
+      setStepDraft({ ...stepDraft, attachments: next });
+    } catch (e) {
+      setFileError(e instanceof Error ? e.message : "파일 첨부 실패");
+    }
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  function addChangeHistory() {
+    if (!stepDraft) return;
+    const fromLabel = changeDraft.fromLabel.trim();
+    const toLabel = changeDraft.toLabel.trim();
+    const reason = changeDraft.reason.trim();
+    if (!fromLabel || !toLabel || !reason || !changeDraft.changedAt) return;
+
+    const entry: WorkflowStandardChange = {
+      id: `chg-${Date.now()}`,
+      changedAt: changeDraft.changedAt,
+      fromLabel,
+      toLabel,
+      reason,
+      createdAt: new Date().toISOString(),
+    };
+    setStepDraft({
+      ...stepDraft,
+      standardLabel: toLabel,
+      changeHistory: [entry, ...(stepDraft.changeHistory ?? [])],
+    });
+    setChangeDraft({ ...emptyChangeDraft(), fromLabel: toLabel });
+  }
+
+  function saveStep() {
+    if (!stepDraft || !stepProcessId || !stepDraft.title.trim()) return;
+    const process = processes.find((p) => p.id === stepProcessId);
+    if (!process) return;
+    const nextStep = normalizeStep(stepDraft);
+    upsertProcess({
+      ...process,
+      steps: process.steps.map((s) => (s.id === nextStep.id ? nextStep : s)),
+      updatedAt: new Date().toISOString(),
+    });
+    setStepOpen(false);
+    setStepDraft(null);
+    setStepProcessId(null);
   }
 
   if (!hydrated) {
@@ -155,9 +260,8 @@ export function WorkflowBoard() {
             업무기술서 · Work Flow
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            관례로 해오던 업무를 단계별 프로세스로 등록해, 입·퇴사 시에도
-            인수인계가 가능하도록 만듭니다. 담당자가 직접 등록·수정할 수
-            있습니다.
+            프로세스는 「수정」으로, 각 단계(카드)는 클릭해서 기준 파일·변경
+            이력을 관리합니다.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -173,44 +277,39 @@ export function WorkflowBoard() {
             <RotateCcw data-icon="inline-start" />
             샘플 초기화
           </Button>
-          <Button size="sm" onClick={openCreate}>
+          <Button size="sm" onClick={openCreateProcess}>
             <Plus data-icon="inline-start" />
             프로세스 등록
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-3 @md/app:grid-cols-3">
-        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-xs text-muted-foreground">완료율</p>
-          <p className="mt-1 font-heading text-3xl font-semibold text-dh-deep dark:text-dh-light">
-            {stats.rate}%
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {stats.done}/{stats.total} 단계
-          </p>
-        </div>
-        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-xs text-muted-foreground">진행 중</p>
-          <p className="mt-1 font-heading text-3xl font-semibold text-dh-sea">
-            {stats.inProgress}
-          </p>
-        </div>
-        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-xs text-muted-foreground">지연</p>
-          <p className="mt-1 font-heading text-3xl font-semibold text-dh-red">
-            {stats.delayed}
-          </p>
-        </div>
+      <div className="inline-flex rounded-lg border border-border bg-card p-1 shadow-sm">
+        {DOMAIN_TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setDomain(t.id)}
+            className={cn(
+              "rounded-md px-4 py-1.5 text-sm font-medium transition",
+              domain === t.id
+                ? "bg-dh-real text-white"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
       <div className="space-y-4">
-        {processes.length === 0 ? (
+        {filtered.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center text-muted-foreground">
-            등록된 프로세스가 없습니다. 첫 Work Flow를 등록해 주세요.
+            이 영역에 등록된 프로세스가 없습니다. 「프로세스 등록」으로 추가해
+            주세요.
           </div>
         ) : (
-          processes.map((process) => {
+          filtered.map((process) => {
             const stages = [
               ...new Set(process.steps.map((s) => s.stage)),
             ].sort((a, b) => a - b);
@@ -237,7 +336,7 @@ export function WorkflowBoard() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => openEdit(process)}
+                      onClick={() => openEditProcess(process)}
                     >
                       수정
                     </Button>
@@ -271,28 +370,48 @@ export function WorkflowBoard() {
                             {stage}단계
                           </p>
                           {steps.map((step) => {
-                            const meta = STATUS_META[step.status];
-                            const Icon = meta.Icon;
+                            const fileCount = step.attachments?.length ?? 0;
+                            const histCount = step.changeHistory?.length ?? 0;
                             return (
-                              <div
+                              <button
                                 key={step.id}
-                                className={cn(
-                                  "rounded-lg border px-3 py-2.5",
-                                  meta.className,
-                                )}
+                                type="button"
+                                onClick={() => openEditStep(process, step)}
+                                className="w-full rounded-lg border border-amber-200/80 bg-amber-50 px-3 py-2.5 text-left transition hover:border-dh-sea hover:bg-amber-100/80 dark:border-amber-900/40 dark:bg-amber-950/30 dark:hover:bg-amber-950/50"
                               >
-                                <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium">
-                                  <Icon className="size-3.5" />
-                                  {meta.label}
-                                </div>
-                                <p className="text-sm font-semibold leading-snug">
+                                <p className="text-sm font-semibold leading-snug text-foreground">
                                   {step.title}
                                 </p>
-                                <p className="mt-1 text-xs opacity-80">
-                                  {memberMap[step.ownerId]?.name ?? "미지정"} ·{" "}
-                                  {step.dueLabel || "일정 미정"}
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {memberMap[step.ownerId]?.name ?? "미지정"}
+                                  {step.dueLabel ? ` · ${step.dueLabel}` : ""}
                                 </p>
-                              </div>
+                                {step.standardLabel ||
+                                fileCount > 0 ||
+                                histCount > 0 ? (
+                                  <p className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-dh-deep dark:text-dh-sky">
+                                    {step.standardLabel ? (
+                                      <span>기준 {step.standardLabel}</span>
+                                    ) : null}
+                                    {fileCount > 0 ? (
+                                      <span className="inline-flex items-center gap-0.5">
+                                        <Paperclip className="size-3" />
+                                        {fileCount}
+                                      </span>
+                                    ) : null}
+                                    {histCount > 0 ? (
+                                      <span className="inline-flex items-center gap-0.5">
+                                        <History className="size-3" />
+                                        {histCount}
+                                      </span>
+                                    ) : null}
+                                  </p>
+                                ) : (
+                                  <p className="mt-1.5 text-[11px] text-muted-foreground">
+                                    클릭하여 기준·파일 등록
+                                  </p>
+                                )}
+                              </button>
                             );
                           })}
                         </div>
@@ -311,64 +430,95 @@ export function WorkflowBoard() {
         )}
       </div>
 
+      {/* 프로세스 등록/수정 — 이름·단계 구성만 */}
       <Dialog
-        open={open}
+        open={processOpen}
         onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) setDraft(null);
+          setProcessOpen(next);
+          if (!next) setProcessDraft(null);
         }}
       >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Work Flow 등록</DialogTitle>
+            <DialogTitle>프로세스 등록·수정</DialogTitle>
           </DialogHeader>
-          {draft ? (
+          {processDraft ? (
             <div className="grid gap-3 py-1">
+              <p className="text-[11px] text-muted-foreground">
+                기준 파일·변경 이력은 저장 후 각 단계 카드를 클릭해 등록하세요.
+              </p>
               <div className="grid gap-1.5">
                 <Label>프로세스명</Label>
                 <Input
-                  value={draft.name}
+                  value={processDraft.name}
                   onChange={(e) =>
-                    setDraft({ ...draft, name: e.target.value })
+                    setProcessDraft({ ...processDraft, name: e.target.value })
                   }
                   placeholder="예: 채용 → 입사 온보딩"
                 />
               </div>
-              <div className="grid gap-1.5">
-                <Label>카테고리</Label>
-                <Input
-                  value={draft.category}
-                  onChange={(e) =>
-                    setDraft({ ...draft, category: e.target.value })
-                  }
-                  placeholder="채용 / 퇴직 / 급여 등"
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div className="grid gap-1.5">
+                  <Label>영역</Label>
+                  <select
+                    className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+                    value={processDraft.domain ?? "hr"}
+                    onChange={(e) =>
+                      setProcessDraft({
+                        ...processDraft,
+                        domain: e.target.value as WorkflowDomain,
+                      })
+                    }
+                  >
+                    {DOMAIN_TABS.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid gap-1.5">
+                  <Label>카테고리</Label>
+                  <Input
+                    value={processDraft.category}
+                    onChange={(e) =>
+                      setProcessDraft({
+                        ...processDraft,
+                        category: e.target.value,
+                      })
+                    }
+                    placeholder="채용 / 퇴직 / 급여 등"
+                  />
+                </div>
               </div>
               <div className="grid gap-1.5">
                 <Label>설명</Label>
                 <Textarea
-                  value={draft.description}
+                  value={processDraft.description}
                   onChange={(e) =>
-                    setDraft({ ...draft, description: e.target.value })
+                    setProcessDraft({
+                      ...processDraft,
+                      description: e.target.value,
+                    })
                   }
-                  placeholder="인수인계용으로 프로세스를 간단히 설명해 주세요"
+                  placeholder="프로세스 개요"
                 />
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label>단계</Label>
+                  <Label>프로세스 단계</Label>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={addStep}
+                    onClick={addProcessStep}
                   >
                     <Plus data-icon="inline-start" />
                     단계 추가
                   </Button>
                 </div>
-                {draft.steps.map((step, idx) => (
+                {processDraft.steps.map((step, idx) => (
                   <div
                     key={step.id}
                     className="grid gap-2 rounded-lg border border-border p-3"
@@ -377,19 +527,19 @@ export function WorkflowBoard() {
                       placeholder={`${idx + 1}단계 업무명`}
                       value={step.title}
                       onChange={(e) => {
-                        const steps = [...draft.steps];
+                        const steps = [...processDraft.steps];
                         steps[idx] = { ...step, title: e.target.value };
-                        setDraft({ ...draft, steps });
+                        setProcessDraft({ ...processDraft, steps });
                       }}
                     />
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       <select
                         className="h-9 rounded-md border border-border bg-background px-2 text-sm"
                         value={step.ownerId}
                         onChange={(e) => {
-                          const steps = [...draft.steps];
+                          const steps = [...processDraft.steps];
                           steps[idx] = { ...step, ownerId: e.target.value };
-                          setDraft({ ...draft, steps });
+                          setProcessDraft({ ...processDraft, steps });
                         }}
                       >
                         {members.map((m) => (
@@ -399,31 +549,14 @@ export function WorkflowBoard() {
                         ))}
                       </select>
                       <Input
-                        placeholder="일정 (D-7)"
+                        placeholder="표준 일정 (D-7)"
                         value={step.dueLabel}
                         onChange={(e) => {
-                          const steps = [...draft.steps];
+                          const steps = [...processDraft.steps];
                           steps[idx] = { ...step, dueLabel: e.target.value };
-                          setDraft({ ...draft, steps });
+                          setProcessDraft({ ...processDraft, steps });
                         }}
                       />
-                      <select
-                        className="h-9 rounded-md border border-border bg-background px-2 text-sm"
-                        value={step.status}
-                        onChange={(e) => {
-                          const steps = [...draft.steps];
-                          steps[idx] = {
-                            ...step,
-                            status: e.target.value as WorkflowStatus,
-                          };
-                          setDraft({ ...draft, steps });
-                        }}
-                      >
-                        <option value="planned">예정</option>
-                        <option value="in_progress">진행</option>
-                        <option value="done">완료</option>
-                        <option value="delayed">지연</option>
-                      </select>
                     </div>
                     <Input
                       type="number"
@@ -431,12 +564,12 @@ export function WorkflowBoard() {
                       placeholder="단계 번호"
                       value={step.stage}
                       onChange={(e) => {
-                        const steps = [...draft.steps];
+                        const steps = [...processDraft.steps];
                         steps[idx] = {
                           ...step,
                           stage: Math.max(1, Number(e.target.value) || 1),
                         };
-                        setDraft({ ...draft, steps });
+                        setProcessDraft({ ...processDraft, steps });
                       }}
                     />
                   </div>
@@ -445,10 +578,262 @@ export function WorkflowBoard() {
             </div>
           ) : null}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
+            <Button variant="outline" onClick={() => setProcessOpen(false)}>
               취소
             </Button>
-            <Button onClick={save}>저장</Button>
+            <Button onClick={saveProcess}>저장</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 단계 개별 수정 — 기준·파일·이력 */}
+      <Dialog
+        open={stepOpen}
+        onOpenChange={(next) => {
+          setStepOpen(next);
+          if (!next) {
+            setStepDraft(null);
+            setStepProcessId(null);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>단계 기준 · 파일</DialogTitle>
+          </DialogHeader>
+          {stepDraft ? (
+            <div className="grid gap-3 py-1">
+              <div className="grid gap-1.5">
+                <Label>단계 업무명</Label>
+                <Input
+                  value={stepDraft.title}
+                  onChange={(e) =>
+                    setStepDraft({ ...stepDraft, title: e.target.value })
+                  }
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="grid gap-1.5">
+                  <Label>담당</Label>
+                  <select
+                    className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+                    value={stepDraft.ownerId}
+                    onChange={(e) =>
+                      setStepDraft({ ...stepDraft, ownerId: e.target.value })
+                    }
+                  >
+                    {members.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} {m.role}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid gap-1.5">
+                  <Label>표준 일정</Label>
+                  <Input
+                    value={stepDraft.dueLabel}
+                    onChange={(e) =>
+                      setStepDraft({ ...stepDraft, dueLabel: e.target.value })
+                    }
+                    placeholder="D-14"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label>현재 기준 명칭</Label>
+                <Input
+                  value={stepDraft.standardLabel ?? ""}
+                  onChange={(e) =>
+                    setStepDraft({
+                      ...stepDraft,
+                      standardLabel: e.target.value,
+                    })
+                  }
+                  placeholder="예: 기준 B / 2024 개정안"
+                />
+              </div>
+
+              <div className="space-y-2 rounded-lg border border-border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="flex items-center gap-1.5">
+                    <FileText className="size-3.5" />
+                    기준 파일
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <Paperclip data-icon="inline-start" />
+                    파일 첨부
+                  </Button>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    className="hidden"
+                    multiple
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.hwp,.hwpx,.txt,.png,.jpg,.jpeg"
+                    onChange={(e) => onPickFiles(e.target.files)}
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  이 단계 업무의 기준 문서 · 파일당{" "}
+                  {formatBytes(MAX_FILE_BYTES)} 이하
+                </p>
+                {fileError ? (
+                  <p className="text-xs font-medium text-dh-red">{fileError}</p>
+                ) : null}
+                {(stepDraft.attachments?.length ?? 0) === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    첨부된 파일 없음
+                  </p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {stepDraft.attachments!.map((att) => (
+                      <li
+                        key={att.id}
+                        className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-xs"
+                      >
+                        <a
+                          href={att.dataUrl}
+                          download={att.name}
+                          className="truncate hover:underline"
+                        >
+                          {att.name}{" "}
+                          <span className="text-muted-foreground">
+                            ({formatBytes(att.size)})
+                          </span>
+                        </a>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-dh-red"
+                          onClick={() =>
+                            setStepDraft({
+                              ...stepDraft,
+                              attachments: (stepDraft.attachments ?? []).filter(
+                                (a) => a.id !== att.id,
+                              ),
+                            })
+                          }
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="space-y-2 rounded-lg border border-border p-3">
+                <Label className="flex items-center gap-1.5">
+                  <History className="size-3.5" />
+                  기준 변경 이력 추가
+                </Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="grid gap-1">
+                    <span className="text-[11px] text-muted-foreground">
+                      이전 기준
+                    </span>
+                    <Input
+                      value={changeDraft.fromLabel}
+                      onChange={(e) =>
+                        setChangeDraft((d) => ({
+                          ...d,
+                          fromLabel: e.target.value,
+                        }))
+                      }
+                      placeholder="A"
+                    />
+                  </div>
+                  <div className="grid gap-1">
+                    <span className="text-[11px] text-muted-foreground">
+                      변경 후
+                    </span>
+                    <Input
+                      value={changeDraft.toLabel}
+                      onChange={(e) =>
+                        setChangeDraft((d) => ({
+                          ...d,
+                          toLabel: e.target.value,
+                        }))
+                      }
+                      placeholder="B"
+                    />
+                  </div>
+                </div>
+                <Input
+                  type="date"
+                  value={changeDraft.changedAt}
+                  onChange={(e) =>
+                    setChangeDraft((d) => ({
+                      ...d,
+                      changedAt: e.target.value,
+                    }))
+                  }
+                />
+                <Textarea
+                  value={changeDraft.reason}
+                  onChange={(e) =>
+                    setChangeDraft((d) => ({ ...d, reason: e.target.value }))
+                  }
+                  placeholder="변경 사유"
+                  rows={2}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addChangeHistory}
+                >
+                  <Plus data-icon="inline-start" />
+                  이력 추가
+                </Button>
+                {(stepDraft.changeHistory?.length ?? 0) > 0 ? (
+                  <ul className="space-y-1.5 border-t border-border pt-2">
+                    {stepDraft.changeHistory!.map((h) => (
+                      <li
+                        key={h.id}
+                        className="flex items-start justify-between gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-xs"
+                      >
+                        <div>
+                          <p className="font-medium">
+                            {h.changedAt} · {h.fromLabel} → {h.toLabel}
+                          </p>
+                          <p className="text-muted-foreground">{h.reason}</p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 shrink-0 px-2 text-dh-red"
+                          onClick={() =>
+                            setStepDraft({
+                              ...stepDraft,
+                              changeHistory: (
+                                stepDraft.changeHistory ?? []
+                              ).filter((c) => c.id !== h.id),
+                            })
+                          }
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setStepOpen(false)}>
+              취소
+            </Button>
+            <Button onClick={saveStep}>저장</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

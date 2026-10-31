@@ -21,6 +21,12 @@ export type TeamMember = {
   isAdmin?: boolean;
   /** 사이드 메뉴 href 목록. 관리자는 전체. 홈(/)은 항상 포함 */
   allowedMenus?: string[];
+  /**
+   * 인사총무 이력 하위 탭 id.
+   * undefined = 전부 허용(하위호환).
+   * 배열이면 승진현황(promotions)은 포함될 때만 허용(다른 탭은 당분간 항상 허용).
+   */
+  allowedHrSubs?: string[];
 };
 
 /** 세부업무 상태 (병목 관리용) */
@@ -47,7 +53,12 @@ export type WeeklyTask = {
   status: TaskStatus;
   priority: TaskPriority;
   dueDay: "월" | "화" | "수" | "목" | "금";
+  /** 대표 기한일 (보통 endDate와 동일) */
   dueDate?: string;
+  /** 업무 기간 시작 YYYY-MM-DD */
+  startDate?: string;
+  /** 업무 기간 종료 YYYY-MM-DD */
+  endDate?: string;
   category: string;
   updatedAt: string;
   /** 업무 수행을 위한 세부업무 (클릭 시 펼침) */
@@ -87,6 +98,9 @@ export type CalendarAttachment = {
 
 export type CalendarVisibility = "공개" | "비공개";
 
+/** calendar=직접 입력, weekly=주간업무 기한(표시 전용) */
+export type CalendarEventSource = "calendar" | "weekly";
+
 export type CalendarEvent = {
   id: string;
   title: string;
@@ -111,6 +125,8 @@ export type CalendarEvent = {
   videoLink: string;
   reminder: string;
   attachments: CalendarAttachment[];
+  /** 없으면 calendar(직접 입력). weekly는 저장하지 않는 표시용 */
+  source?: CalendarEventSource;
 };
 
 export type JobTrack =
@@ -362,20 +378,55 @@ export type RaciBundle = {
   activities: RaciActivity[];
 };
 
+/** @deprecated 진행 상태 추적 제거 — 하위호환용 */
 export type WorkflowStatus = "planned" | "in_progress" | "done" | "delayed";
+
+/** 업무기술서 대분류 탭 */
+export type WorkflowDomain = "hr" | "ga" | "planning";
+
+/** 업무 기준 첨부파일 (로컬 저장용 data URL) */
+export type WorkflowAttachment = {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  dataUrl: string;
+  uploadedAt: string;
+};
+
+/** 기준 변경 이력 (A → B, 일자, 사유) */
+export type WorkflowStandardChange = {
+  id: string;
+  changedAt: string;
+  fromLabel: string;
+  toLabel: string;
+  reason: string;
+  attachmentId?: string;
+  createdAt: string;
+};
 
 export type WorkflowStep = {
   id: string;
   title: string;
   ownerId: string;
+  /** 표준 일정 표기 (예: D-14, 매월 15일) */
   dueLabel: string;
-  status: WorkflowStatus;
+  /** @deprecated 표시하지 않음 */
+  status?: WorkflowStatus;
   stage: number;
+  /** 이 단계의 현재 기준 명칭 */
+  standardLabel?: string;
+  /** 이 단계의 기준 문서 */
+  attachments?: WorkflowAttachment[];
+  /** 이 단계의 기준 변경 이력 */
+  changeHistory?: WorkflowStandardChange[];
 };
 
 export type WorkflowProcess = {
   id: string;
   name: string;
+  /** 인사 / 총무 / 기획 */
+  domain: WorkflowDomain;
   category: string;
   description: string;
   steps: WorkflowStep[];

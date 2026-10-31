@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FolderKanban } from "lucide-react";
 import { ContractsDbPanel } from "@/components/hr-records/contracts-db-panel";
 import { PermitsDbPanel } from "@/components/hr-records/permits-db-panel";
@@ -15,6 +15,11 @@ import {
   seedPromotions,
   seedQualificationAllowances,
 } from "@/data/hr-records-seed";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import {
+  HR_SUB_PROMOTIONS,
+  canAccessHrSub,
+} from "@/lib/app-menus";
 import type {
   AwardRecord,
   CompanyVehicleRecord,
@@ -137,18 +142,57 @@ export function HrRecordsView({
   initialMain?: MainTab;
   initialSub?: string;
 }) {
+  const { currentMember, isAdmin } = useCurrentUser();
   const [main, setMain] = useState<MainTab>(initialMain);
   const defaultSub = initialSub ?? SUB_TABS[initialMain][0]?.id ?? "promotions";
   const [sub, setSub] = useState(defaultSub);
+  const [deniedNotice, setDeniedNotice] = useState(false);
 
-  const subs = SUB_TABS[main];
+  const canPromotions = canAccessHrSub(
+    isAdmin,
+    currentMember?.allowedHrSubs,
+    HR_SUB_PROMOTIONS,
+  );
+
+  const subs = useMemo(() => {
+    const list = SUB_TABS[main];
+    if (main !== "hr") return list;
+    return list.filter(
+      (s) =>
+        s.id !== HR_SUB_PROMOTIONS ||
+        canAccessHrSub(isAdmin, currentMember?.allowedHrSubs, s.id),
+    );
+  }, [main, isAdmin, currentMember?.allowedHrSubs]);
 
   function switchMain(next: MainTab) {
     setMain(next);
-    setSub(SUB_TABS[next][0]?.id ?? "");
+    const nextSubs = SUB_TABS[next].filter(
+      (s) =>
+        s.id !== HR_SUB_PROMOTIONS ||
+        canAccessHrSub(isAdmin, currentMember?.allowedHrSubs, s.id),
+    );
+    setSub(nextSubs[0]?.id ?? "");
+    setDeniedNotice(false);
   }
 
+  useEffect(() => {
+    if (sub !== HR_SUB_PROMOTIONS) {
+      setDeniedNotice(false);
+      return;
+    }
+    if (canPromotions) return;
+    const fallback =
+      SUB_TABS.hr.find((s) => s.id !== HR_SUB_PROMOTIONS)?.id ??
+      SUB_TABS.hr[0]?.id ??
+      "";
+    setSub(fallback);
+    setDeniedNotice(true);
+  }, [sub, canPromotions]);
+
   const panel = useMemo(() => {
+    if (sub === HR_SUB_PROMOTIONS && !canPromotions) {
+      return null;
+    }
     switch (sub) {
       case "promotions":
         return <PromotionsSection />;
@@ -322,7 +366,7 @@ export function HrRecordsView({
       default:
         return null;
     }
-  }, [sub]);
+  }, [sub, canPromotions]);
 
   return (
     <div className="space-y-5">
@@ -335,6 +379,12 @@ export function HrRecordsView({
           인사 · 총무 · IT 이력을 탭으로 관리합니다. 계약·인허가 DB는 기존과
           동일하게 홈 알림과 연동됩니다.
         </p>
+        {deniedNotice ? (
+          <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">
+            승진현황 탭 권한이 없어 다른 탭으로 이동했습니다. 필요하면 관리자에게
+            메뉴 권한을 요청하세요.
+          </p>
+        ) : null}
       </div>
 
       <div className="inline-flex rounded-lg border border-border bg-card p-1 shadow-sm">

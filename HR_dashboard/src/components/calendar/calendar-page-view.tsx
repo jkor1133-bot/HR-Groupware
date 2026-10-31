@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   ChevronLeft,
@@ -18,9 +18,15 @@ import {
 } from "@/components/calendar/event-form-dialog";
 import { Button } from "@/components/ui/button";
 import { useCalendar } from "@/hooks/use-calendar";
+import { useWeeklyPlans } from "@/hooks/use-weekly-plans";
 import type { CalendarEvent, TeamMember } from "@/lib/types";
+import {
+  isWeeklyCalendarEvent,
+  weeklyTasksToCalendarEvents,
+} from "@/lib/weekly-calendar";
 import { addDays, formatYmd } from "@/lib/week";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 type ViewMode = "day" | "week" | "month";
@@ -31,6 +37,7 @@ function formatSelectedLabel(ymd: string) {
 }
 
 function eventChipLabel(ev: CalendarEvent) {
+  if (isWeeklyCalendarEvent(ev)) return `[주간] ${ev.title}`;
   if (ev.allDay) return ev.title;
   return `${ev.startTime} ${ev.title}`;
 }
@@ -64,6 +71,7 @@ const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 export function CalendarPageView() {
   const { hydrated, eventsOn, upsert, remove, members } = useCalendar();
+  const { hydrated: weeklyHydrated, tasks } = useWeeklyPlans();
   const [mode, setMode] = useState<ViewMode>("month");
   const [cursor, setCursor] = useState<Date | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -84,6 +92,30 @@ export function CalendarPageView() {
   const memberMap = useMemo(
     () => Object.fromEntries(members.map((m) => [m.id, m])),
     [members],
+  );
+
+  const weeklyEvents = useMemo(
+    () => weeklyTasksToCalendarEvents(tasks),
+    [tasks],
+  );
+  const weeklyCount = weeklyEvents.length;
+
+  /** 직접 입력 + 주간업무 기한 (Calendar 페이지 전용) */
+  const itemsOn = useCallback(
+    (date: string) => {
+      const fromCalendar = eventsOn(date);
+      const fromWeekly = weeklyEvents.filter((e) => {
+        const end = e.endDate || e.date;
+        return e.date <= date && end >= date;
+      });
+      return [...fromCalendar, ...fromWeekly].sort((a, b) => {
+        const aw = isWeeklyCalendarEvent(a) ? 1 : 0;
+        const bw = isWeeklyCalendarEvent(b) ? 1 : 0;
+        if (aw !== bw) return aw - bw;
+        return a.startTime.localeCompare(b.startTime);
+      });
+    },
+    [eventsOn, weeklyEvents],
   );
 
   const year = cursor?.getFullYear() ?? 2026;
@@ -129,6 +161,7 @@ export function CalendarPageView() {
   }
 
   function openEdit(ev: CalendarEvent) {
+    if (isWeeklyCalendarEvent(ev)) return;
     setDetail(null);
     setEditingId(ev.id);
     setEditingCreatedAt(ev.createdAt);
@@ -137,11 +170,11 @@ export function CalendarPageView() {
   }
 
   function handleSave(event: CalendarEvent) {
-    upsert(event);
+    upsert({ ...event, source: "calendar" });
     setFormOpen(false);
   }
 
-  if (!hydrated || !cursor || !selected) {
+  if (!hydrated || !weeklyHydrated || !cursor || !selected) {
     return (
       <div className="flex min-h-[24rem] items-center justify-center rounded-xl border border-border bg-card text-sm text-muted-foreground shadow-sm">
         캘린더를 불러오는 중…
@@ -149,7 +182,8 @@ export function CalendarPageView() {
     );
   }
 
-  const dayEvents = eventsOn(selected);
+  const dayEvents = itemsOn(selected);
+  const detailIsWeekly = detail ? isWeeklyCalendarEvent(detail) : false;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -160,8 +194,25 @@ export function CalendarPageView() {
             Calendar
           </h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            일간 · 주간 · 월간 일정 · 홈 캘린더와 동일 데이터로 연동됩니다
+            직접 입력 일정과 주간업무 기한을 함께 표시합니다. 주간업무는
+            주황으로 구분되며, 홈 캘린더에는 직접 입력만 나갑니다.
           </p>
+          <div className="mt-1.5 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="size-2 rounded-full"
+                style={{ backgroundColor: "#1f4889" }}
+              />
+              직접 입력
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="size-2 rounded-full"
+                style={{ backgroundColor: "#b45309" }}
+              />
+              주간업무 기한 ({weeklyCount}건)
+            </span>
+          </div>
         </div>
         <Button onClick={() => openCreate()}>
           <Plus data-icon="inline-start" />
@@ -230,7 +281,7 @@ export function CalendarPageView() {
             days={monthDays}
             month={month}
             selected={selected}
-            eventsOn={eventsOn}
+            eventsOn={itemsOn}
             onSelect={(ymd) => {
               setSelected(ymd);
               setCursor(parseYmd(ymd));
@@ -244,7 +295,7 @@ export function CalendarPageView() {
           <WeekGrid
             days={weekDays}
             selected={selected}
-            eventsOn={eventsOn}
+            eventsOn={itemsOn}
             onSelect={(ymd) => {
               setSelected(ymd);
               setCursor(parseYmd(ymd));
@@ -297,14 +348,33 @@ export function CalendarPageView() {
         onOpenChange={(o) => {
           if (!o) setDetail(null);
         }}
-        onEdit={() => detail && openEdit(detail)}
-        onDelete={() => {
-          if (!detail) return;
-          if (window.confirm(`"${detail.title}" 일정을 삭제할까요?`)) {
-            remove(detail.id);
-            setDetail(null);
-          }
-        }}
+        onEdit={
+          detailIsWeekly
+            ? undefined
+            : () => detail && openEdit(detail)
+        }
+        onDelete={
+          detailIsWeekly
+            ? undefined
+            : () => {
+                if (!detail) return;
+                if (window.confirm(`"${detail.title}" 일정을 삭제할까요?`)) {
+                  remove(detail.id);
+                  setDetail(null);
+                }
+              }
+        }
+        footerExtra={
+          detailIsWeekly ? (
+            <Link
+              href="/weekly-plans"
+              onClick={() => setDetail(null)}
+              className="inline-flex h-8 items-center rounded-md border border-border bg-background px-3 text-sm hover:bg-muted"
+            >
+              주간업무계획에서 확인
+            </Link>
+          ) : null
+        }
       />
 
     </div>
@@ -681,18 +751,24 @@ function DaySummaryBar({
                     </p>
                   ) : null}
                 </button>
-                <button
-                  type="button"
-                  className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-dh-red"
-                  aria-label="삭제"
-                  onClick={() => {
-                    if (window.confirm(`"${ev.title}" 일정을 삭제할까요?`)) {
-                      onRemove(ev.id);
-                    }
-                  }}
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
+                {isWeeklyCalendarEvent(ev) ? (
+                  <span className="shrink-0 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                    주간업무
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-dh-red"
+                    aria-label="삭제"
+                    onClick={() => {
+                      if (window.confirm(`"${ev.title}" 일정을 삭제할까요?`)) {
+                        onRemove(ev.id);
+                      }
+                    }}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                )}
               </li>
             );
           })}

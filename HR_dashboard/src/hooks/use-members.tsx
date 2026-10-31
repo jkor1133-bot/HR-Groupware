@@ -31,6 +31,9 @@ function normalize(m: TeamMember): TeamMember {
   const status =
     m.status ??
     (email ? "active" : "pending");
+  const allowedHrSubs = Array.isArray(m.allowedHrSubs)
+    ? m.allowedHrSubs.filter((s) => typeof s === "string" && s.length > 0)
+    : undefined;
   return {
     ...m,
     email,
@@ -42,6 +45,8 @@ function normalize(m: TeamMember): TeamMember {
       : ensureHomeMenu(
           m.allowedMenus?.length ? m.allowedMenus : DEFAULT_MEMBER_MENUS,
         ),
+    // 관리자는 탭 제한 없음(필드 무시). 비관리자는 명시 배열만 유지
+    allowedHrSubs: isAdmin ? undefined : allowedHrSubs,
   };
 }
 

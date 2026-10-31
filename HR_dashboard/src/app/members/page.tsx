@@ -11,7 +11,9 @@ import {
   ALL_MENU_HREFS,
   APP_MENUS,
   DEFAULT_MEMBER_MENUS,
+  canAccessHrSub,
   ensureHomeMenu,
+  setPromotionsHrSub,
   type AppMenuId,
 } from "@/lib/app-menus";
 import type { MemberStatus, TeamMember } from "@/lib/types";
@@ -604,9 +606,10 @@ export default function MembersPage() {
             메뉴 권한 지정
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            담당자마다 사이드바에서 볼 메뉴를 체크하세요. 체크 즉시 저장되며,
-            헤더에서 해당 사용자로 바꾸면 메뉴가 바로 반영됩니다. 홈은 모두
-            고정, 관리자는 전체 메뉴입니다.
+            담당자마다 사이드바 메뉴와 인사총무 이력「승진현황」탭을 체크하세요.
+            체크 즉시 저장되며, 헤더에서 해당 사용자로 바꾸면 바로 반영됩니다.
+            홈은 고정, 관리자는 전체입니다. 승진현황은 「인사총무 이력」이 켜져
+            있을 때만 지정할 수 있습니다.
           </p>
           {!canEditPermissions ? (
             <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">
@@ -631,13 +634,16 @@ export default function MembersPage() {
                     {menu.label}
                   </th>
                 ))}
+                <th className="px-2 py-2.5 text-center text-xs font-medium">
+                  승진현황
+                </th>
               </tr>
             </thead>
             <tbody>
               {members.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={2 + APP_MENUS.length}
+                    colSpan={3 + APP_MENUS.length}
                     className="px-4 py-8 text-center text-muted-foreground"
                   >
                     담당자를 먼저 등록하세요.
@@ -648,6 +654,13 @@ export default function MembersPage() {
                   const menus = m.isAdmin
                     ? ALL_MENU_HREFS
                     : ensureHomeMenu(m.allowedMenus);
+                  const hasHrRecords =
+                    Boolean(m.isAdmin) || menus.includes("/hr-records");
+                  const promotionsOn = canAccessHrSub(
+                    m.isAdmin,
+                    m.allowedHrSubs,
+                    "promotions",
+                  );
                   return (
                     <tr
                       key={m.id}
@@ -677,6 +690,9 @@ export default function MembersPage() {
                                 : ensureHomeMenu(
                                     m.allowedMenus ?? DEFAULT_MEMBER_MENUS,
                                   ),
+                              allowedHrSubs: e.target.checked
+                                ? undefined
+                                : m.allowedHrSubs,
                             });
                           }}
                         />
@@ -704,6 +720,35 @@ export default function MembersPage() {
                           </td>
                         );
                       })}
+                      <td className="px-2 py-2.5 text-center">
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-dh-real disabled:opacity-50"
+                          checked={promotionsOn}
+                          disabled={
+                            !canEditPermissions ||
+                            Boolean(m.isAdmin) ||
+                            !hasHrRecords
+                          }
+                          title={
+                            !hasHrRecords
+                              ? "인사총무 이력 메뉴를 먼저 켜세요"
+                              : "승진현황 탭"
+                          }
+                          aria-label={`${m.name} · 승진현황`}
+                          onChange={(e) => {
+                            if (!canEditPermissions || m.isAdmin) return;
+                            if (!hasHrRecords) return;
+                            upsert({
+                              ...m,
+                              allowedHrSubs: setPromotionsHrSub(
+                                m.allowedHrSubs,
+                                e.target.checked,
+                              ),
+                            });
+                          }}
+                        />
+                      </td>
                     </tr>
                   );
                 })

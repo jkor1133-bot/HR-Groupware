@@ -39,7 +39,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { useWeeklyPlans } from "@/hooks/use-weekly-plans";
+import { canManageAllWeeklyPlans } from "@/lib/app-menus";
 import type { TaskStatus, WeeklyTask } from "@/lib/types";
 import {
   isCurrentWeek,
@@ -62,6 +64,9 @@ export function WeeklyPlanBoard() {
     exportJson,
     importJson,
   } = useWeeklyPlans();
+  const { currentMember, hydrated: userHydrated } = useCurrentUser();
+  const canManageAll = canManageAllWeeklyPlans(currentMember);
+  const selfId = currentMember?.id ?? null;
 
   const [weekId, setWeekId] = useState<string | null>(null);
   const [ownerFilter, setOwnerFilter] = useState<string>("all");
@@ -76,10 +81,20 @@ export function WeeklyPlanBoard() {
     setWeekId(weekIdFromDate(new Date()));
   }, []);
 
+  // 일반 담당자는 항상 본인 필터
+  useEffect(() => {
+    if (!userHydrated) return;
+    if (!canManageAll && selfId) {
+      setOwnerFilter(selfId);
+    }
+  }, [userHydrated, canManageAll, selfId]);
+
   const weekTasks = useMemo(() => {
     if (!weekId) return [];
     let list = tasksByWeek(weekId);
-    if (ownerFilter !== "all") {
+    if (!canManageAll && selfId) {
+      list = list.filter((t) => t.ownerId === selfId);
+    } else if (ownerFilter !== "all") {
       list = list.filter((t) => t.ownerId === ownerFilter);
     }
     if (statusFilter !== "all") {
@@ -87,12 +102,24 @@ export function WeeklyPlanBoard() {
     }
     const dayOrder = { 월: 0, 화: 1, 수: 2, 목: 3, 금: 4 };
     return [...list].sort(
-      (a, b) => dayOrder[a.dueDay] - dayOrder[b.dueDay] || a.title.localeCompare(b.title, "ko"),
+      (a, b) =>
+        dayOrder[a.dueDay] - dayOrder[b.dueDay] ||
+        a.title.localeCompare(b.title, "ko"),
     );
-  }, [tasksByWeek, weekId, ownerFilter, statusFilter]);
+  }, [
+    tasksByWeek,
+    weekId,
+    ownerFilter,
+    statusFilter,
+    canManageAll,
+    selfId,
+  ]);
 
   const summary = useMemo(() => {
-    const all = weekId ? tasksByWeek(weekId) : [];
+    let all = weekId ? tasksByWeek(weekId) : [];
+    if (!canManageAll && selfId) {
+      all = all.filter((t) => t.ownerId === selfId);
+    }
     return {
       total: all.length,
       done: all.filter((t) => t.status === "done").length,
@@ -100,12 +127,17 @@ export function WeeklyPlanBoard() {
       delayed: all.filter((t) => t.status === "delayed").length,
       planned: all.filter((t) => t.status === "planned").length,
     };
-  }, [tasksByWeek, weekId]);
+  }, [tasksByWeek, weekId, canManageAll, selfId]);
 
   const memberMap = useMemo(
     () => Object.fromEntries(members.map((m) => [m.id, m])),
     [members],
   );
+
+  function canEditTask(task: WeeklyTask) {
+    if (canManageAll) return true;
+    return Boolean(selfId && task.ownerId === selfId);
+  }
 
   function openCreate() {
     setEditing(null);
@@ -113,6 +145,7 @@ export function WeeklyPlanBoard() {
   }
 
   function openEdit(task: WeeklyTask) {
+    if (!canEditTask(task)) return;
     setEditing(task);
     setDialogOpen(true);
   }
@@ -127,7 +160,7 @@ export function WeeklyPlanBoard() {
     }
   }
 
-  if (!hydrated || !weekId) {
+  if (!hydrated || !userHydrated || !weekId) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center text-muted-foreground">
         주간업무계획을 불러오는 중…
@@ -146,11 +179,14 @@ export function WeeklyPlanBoard() {
             주간 단위 운영
           </div>
           <h2 className="font-heading text-xl font-semibold tracking-tight text-dh-deep sm:text-2xl">
-            이번 주 인사팀 할 일
+            {canManageAll
+              ? "이번 주 인사팀 할 일"
+              : `${currentMember?.name ?? "내"} 주간 업무`}
           </h2>
           <p className="mt-1.5 max-w-2xl text-sm text-muted-foreground">
-            주간 업무를 등록하고 진행 상태를 확인하세요. 데이터는 이 브라우저에
-            자동 저장되며 JSON으로 내보낼 수 있습니다.
+            {canManageAll
+              ? "팀 전체 주간 업무를 조회·배정하고 진행 상태를 관리합니다. 헤더에서 담당자를 바꿔 개인 화면을 확인할 수 있습니다."
+              : "본인 주간 업무만 등록·수정할 수 있습니다. 다른 담당자 업무는 보이지 않습니다."}
           </p>
         </div>
 
@@ -231,26 +267,30 @@ export function WeeklyPlanBoard() {
               업무 목록
             </CardTitle>
             <CardDescription>
-              담당자·상태별로 필터하고, 새 업무를 추가해 보세요.
+              {canManageAll
+                ? "담당자·상태별로 필터하고, 새 업무를 추가해 보세요."
+                : "내 업무만 표시됩니다. 상태 필터로 진행 상황을 확인할 수 있습니다."}
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Select
-              value={ownerFilter}
-              onValueChange={(v) => setOwnerFilter(v ?? "all")}
-            >
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="담당자" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">전체 담당자</SelectItem>
-                {members.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {canManageAll ? (
+              <Select
+                value={ownerFilter}
+                onValueChange={(v) => setOwnerFilter(v ?? "all")}
+              >
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="담당자" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">전체 담당자</SelectItem>
+                  {members.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
 
             <Select
               value={statusFilter}
@@ -270,7 +310,7 @@ export function WeeklyPlanBoard() {
               </SelectContent>
             </Select>
 
-            <Button onClick={openCreate}>
+            <Button onClick={openCreate} disabled={!selfId}>
               <Plus data-icon="inline-start" />
               업무 추가
             </Button>
@@ -314,7 +354,21 @@ export function WeeklyPlanBoard() {
                       <Fragment key={task.id}>
                         <TableRow className="align-top">
                           <TableCell className="font-medium text-dh-gray">
-                            {task.dueDay}
+                            <div className="text-sm">{task.dueDay}</div>
+                            {task.startDate || task.endDate || task.dueDate ? (
+                              <div className="mt-0.5 text-[10px] font-normal text-muted-foreground">
+                                {task.startDate &&
+                                task.endDate &&
+                                task.startDate !== task.endDate
+                                  ? `${task.startDate.slice(5)}~${task.endDate.slice(5)}`
+                                  : (
+                                      task.endDate ||
+                                      task.startDate ||
+                                      task.dueDate ||
+                                      ""
+                                    ).slice(5)}
+                              </div>
+                            ) : null}
                           </TableCell>
                           <TableCell className="min-w-[220px] text-left">
                             <button
@@ -369,32 +423,38 @@ export function WeeklyPlanBoard() {
                             <StatusBadge status={task.status} />
                           </TableCell>
                           <TableCell>
-                            <div className="inline-flex gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label="수정"
-                                onClick={() => openEdit(task)}
-                              >
-                                <Pencil />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label="삭제"
-                                onClick={() => {
-                                  if (
-                                    window.confirm(
-                                      `"${task.title}" 업무를 삭제할까요?`,
-                                    )
-                                  ) {
-                                    deleteTask(task.id);
-                                  }
-                                }}
-                              >
-                                <Trash2 />
-                              </Button>
-                            </div>
+                            {canEditTask(task) ? (
+                              <div className="inline-flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label="수정"
+                                  onClick={() => openEdit(task)}
+                                >
+                                  <Pencil />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label="삭제"
+                                  onClick={() => {
+                                    if (
+                                      window.confirm(
+                                        `"${task.title}" 업무를 삭제할까요?`,
+                                      )
+                                    ) {
+                                      deleteTask(task.id);
+                                    }
+                                  }}
+                                >
+                                  <Trash2 />
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                —
+                              </span>
+                            )}
                           </TableCell>
                         </TableRow>
                         {expanded ? (
@@ -473,7 +533,14 @@ export function WeeklyPlanBoard() {
         weekId={activeWeekId}
         members={members}
         initial={editing}
-        onSave={upsertTask}
+        lockedOwnerId={canManageAll ? null : selfId}
+        onSave={(task) => {
+          if (!canManageAll && selfId) {
+            upsertTask({ ...task, ownerId: selfId });
+            return;
+          }
+          upsertTask(task);
+        }}
       />
     </div>
   );

@@ -62,7 +62,8 @@ export function TaskSubtasksPanel({
             세부업무 · 병목 관리
           </p>
           <p className="text-xs text-muted-foreground">
-            이 업무를 완수하기 위한 단계별 기한·상태·지연사유를 기록합니다.
+            단계별 기한·상태·지연사유를 기록합니다. 기한(날짜)은 Calendar
+            페이지에 「주간업무」로 따로 표시됩니다.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -171,8 +172,13 @@ export function TaskSubtasksPanel({
                   </td>
                   <td className="px-2 py-2">
                     <Input
-                      value={s.dueLabel}
-                      placeholder="D-3d / 날짜"
+                      type="date"
+                      value={
+                        /^\d{4}-\d{2}-\d{2}$/.test(s.dueLabel.trim())
+                          ? s.dueLabel.trim()
+                          : ""
+                      }
+                      title="캘린더에 표시할 기한 (YYYY-MM-DD)"
                       className="h-8 text-center"
                       onChange={(e) =>
                         updateAt(idx, { dueLabel: e.target.value })

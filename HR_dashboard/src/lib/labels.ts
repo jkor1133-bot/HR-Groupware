@@ -23,6 +23,10 @@ export const PRIORITY_LABEL: Record<TaskPriority, string> = {
 export const WEEKDAYS = ["월", "화", "수", "목", "금"] as const;
 
 export const CATEGORIES = [
+  "인사",
+  "총무",
+  "기획",
+  "IT",
   "운영",
   "채용",
   "온보딩",

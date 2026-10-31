@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Paperclip, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -524,19 +524,22 @@ export function EventDetailDialog({
   onOpenChange,
   onEdit,
   onDelete,
+  footerExtra,
 }: {
   event: CalendarEvent | null;
   ownerName?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onEdit: () => void;
-  onDelete: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  footerExtra?: ReactNode;
 }) {
   if (!event) return null;
   const period =
     event.endDate && event.endDate !== event.date
       ? `${event.date} ~ ${event.endDate}`
       : event.date;
+  const isWeekly = event.source === "weekly" || event.id.startsWith("weekly-");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -551,6 +554,12 @@ export function EventDetailDialog({
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-2 text-sm">
+          {isWeekly ? (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-200">
+              주간업무계획에서 가져온 기한입니다. 캘린더에서 직접 수정할 수
+              없습니다.
+            </p>
+          ) : null}
           <p>
             <span className="text-muted-foreground">일시 · </span>
             {period}
@@ -615,16 +624,21 @@ export function EventDetailDialog({
             </ul>
           ) : null}
         </div>
-        <DialogFooter className="gap-2">
-          <Button
-            variant="outline"
-            className="text-dh-red"
-            onClick={onDelete}
-          >
-            <Trash2 data-icon="inline-start" />
-            삭제
-          </Button>
-          <Button onClick={onEdit}>수정</Button>
+        <DialogFooter className="gap-2 sm:justify-between">
+          <div className="flex flex-wrap gap-2">{footerExtra}</div>
+          <div className="flex flex-wrap gap-2">
+            {onDelete ? (
+              <Button
+                variant="outline"
+                className="text-dh-red"
+                onClick={onDelete}
+              >
+                <Trash2 data-icon="inline-start" />
+                삭제
+              </Button>
+            ) : null}
+            {onEdit ? <Button onClick={onEdit}>수정</Button> : null}
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
