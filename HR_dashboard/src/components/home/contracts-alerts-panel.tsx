@@ -70,14 +70,14 @@ export function ContractsAlertsPanel() {
           불러오는 중…
         </p>
       ) : (
-        <div className="grid min-h-0 flex-1 gap-4 p-4 @md/app:grid-cols-2 @sm/app:p-5">
-          <div>
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 p-4 @md/app:grid-cols-2 @sm/app:p-5">
+          <div className="min-w-0">
             <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-dh-red">
               <AlertTriangle className="size-3.5" />
               근로계약 만료 임박 ({dueContracts.length})
             </p>
             {dueContracts.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+              <p className="flex h-[3.25rem] w-full items-center justify-center rounded-md border border-dashed border-border px-3 text-center text-sm text-muted-foreground">
                 1개월 내 만료·초과 계약 없음
               </p>
             ) : (
@@ -87,17 +87,17 @@ export function ContractsAlertsPanel() {
                   return (
                   <li
                     key={c.id}
-                    className="rounded-md border border-red-200 bg-[#fceeee] px-3 py-2 text-sm dark:border-red-900 dark:bg-red-950/30"
+                    className="flex h-[3.25rem] w-full flex-col justify-center rounded-md border border-red-200 bg-[#fceeee] px-3 text-sm dark:border-red-900 dark:bg-red-950/30"
                   >
                     <p className="flex items-center justify-between gap-2 font-medium">
-                      <span>
+                      <span className="truncate">
                         {c.employeeName} · {c.jobTrack}
                       </span>
                       <span className="shrink-0 text-[11px] font-semibold text-dh-red">
                         {formatDaysLeft(left)}
                       </span>
                     </p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="truncate text-xs text-muted-foreground">
                       {c.contractType} · 종료 {c.endDate}
                     </p>
                   </li>
@@ -106,13 +106,13 @@ export function ContractsAlertsPanel() {
               </ul>
             )}
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
               <AlertTriangle className="size-3.5" />
               인허가 종료 임박 ({duePermits.length})
             </p>
             {duePermits.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+              <p className="flex h-[3.25rem] w-full items-center justify-center rounded-md border border-dashed border-border px-3 text-center text-sm text-muted-foreground">
                 1개월 내 종료·초과 인허가 없음
               </p>
             ) : (
@@ -122,15 +122,15 @@ export function ContractsAlertsPanel() {
                   return (
                   <li
                     key={p.id}
-                    className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm dark:border-amber-900 dark:bg-amber-950/30"
+                    className="flex h-[3.25rem] w-full flex-col justify-center rounded-md border border-amber-200 bg-amber-50 px-3 text-sm dark:border-amber-900 dark:bg-amber-950/30"
                   >
                     <p className="flex items-center justify-between gap-2 font-medium">
-                      <span>{p.name}</span>
+                      <span className="truncate">{p.name}</span>
                       <span className="shrink-0 text-[11px] font-semibold text-amber-800 dark:text-amber-200">
                         {formatDaysLeft(left)}
                       </span>
                     </p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="truncate text-xs text-muted-foreground">
                       {p.authority} · 종료 {p.endDate}
                     </p>
                   </li>
