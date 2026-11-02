@@ -22,6 +22,7 @@ import {
   TEAM_DIVISION,
   TEAMS_BY_DIVISION,
 } from "@/data/org";
+import { useEmployees } from "@/hooks/use-employees";
 import { useLocalList } from "@/hooks/use-local-list";
 import {
   cellDate,
@@ -99,7 +100,21 @@ function formFromEmployee(
   const hireDate = emp.hireDate || emp.groupHireDate || prev.hireDate;
   const title = emp.title?.trim() || prev.title;
   const jobRole = emp.jobRole?.trim() || prev.jobRole;
-  const years = Number(emp.titleYears);
+
+  const rec = emp as EmployeeRosterRecord & Record<string, unknown>;
+  const rawYears = rec.titleYears;
+  const altYears = rec["직위년차"];
+  const pick =
+    rawYears != null
+      ? rawYears
+      : altYears != null && String(altYears).trim() !== ""
+        ? altYears
+        : null;
+  const yearsNum = pick == null ? NaN : Number(pick);
+  const titleYears =
+    Number.isFinite(yearsNum) && yearsNum >= 0
+      ? String(Math.floor(yearsNum))
+      : prev.titleYears;
 
   return {
     ...prev,
@@ -109,10 +124,7 @@ function formFromEmployee(
     title,
     jobRole,
     hireDate,
-    titleYears:
-      Number.isFinite(years) && years >= 0
-        ? String(years)
-        : prev.titleYears,
+    titleYears,
   };
 }
 
@@ -169,6 +181,7 @@ export function PromotionPointsPanel({
     seedPromotionPoints,
   );
   const promotions = useLocalList("hr-dashboard-promotions-v2", seedPromotions);
+  const employees = useEmployees();
   const fileRef = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<PromotionPointRecord[] | null>(null);
@@ -572,7 +585,14 @@ export function PromotionPointsPanel({
               onChange={(name, emp) => {
                 setForm((prev) => {
                   if (!emp) return { ...prev, name };
-                  return formFromEmployee(emp, prev);
+                  // 사원명부 최신 직위년차 등 반영
+                  const latest =
+                    employees.items.find((e) => e.id === emp.id) ??
+                    employees.items.find(
+                      (e) => e.name.trim() === emp.name.trim(),
+                    ) ??
+                    emp;
+                  return formFromEmployee(latest, prev);
                 });
               }}
             />
@@ -616,12 +636,16 @@ export function PromotionPointsPanel({
           <div className="grid gap-1">
             <Label>직위년차</Label>
             <Input
+              key={`title-years-${form.name}-${form.titleYears}`}
               type="number"
               min={0}
               value={form.titleYears}
               disabled={!editing}
               onChange={(e) =>
-                setForm({ ...form, titleYears: e.target.value })
+                setForm((prev) => ({
+                  ...prev,
+                  titleYears: e.target.value,
+                }))
               }
             />
           </div>

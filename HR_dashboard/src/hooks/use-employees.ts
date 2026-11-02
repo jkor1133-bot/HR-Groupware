@@ -9,12 +9,22 @@ import {
 } from "@/lib/employee-roster";
 import type { EmployeeRosterRecord } from "@/lib/types";
 
+function parseStoredTitleYears(raw: Record<string, unknown>): number {
+  const candidates = [raw.titleYears, raw["직위년차"], raw["년차"]];
+  for (const c of candidates) {
+    if (c == null || c === "") continue;
+    const n = typeof c === "number" ? c : Number(String(c).replace(/,/g, ""));
+    if (Number.isFinite(n) && n >= 0 && n <= 60) return Math.floor(n);
+  }
+  return 1;
+}
+
 function sanitizeEmployee(
   raw: EmployeeRosterRecord & { birthDate?: string },
 ): EmployeeRosterRecord {
   const { birthDate: _omit, ...rest } = raw;
   void _omit;
-  const years = Number(rest.titleYears);
+  const asRec = raw as unknown as Record<string, unknown>;
   return {
     id: rest.id,
     division: rest.division ?? "",
@@ -25,7 +35,7 @@ function sanitizeEmployee(
     jobRole: rest.jobRole ?? "",
     jobTrack: rest.jobTrack ?? "",
     gender: rest.gender ?? "",
-    titleYears: Number.isFinite(years) && years >= 0 ? years : 1,
+    titleYears: parseStoredTitleYears(asRec),
     groupHireDate: rest.groupHireDate ?? "",
     hireDate: rest.hireDate ?? "",
   };
@@ -39,10 +49,16 @@ function loadEmployees(): EmployeeRosterRecord[] {
     const parsed = JSON.parse(raw) as EmployeeRosterRecord[];
     if (!Array.isArray(parsed)) return seedEmployeeRoster();
     const cleaned = parsed.map(sanitizeEmployee);
-    const hadBirth = parsed.some(
-      (e) => e && typeof e === "object" && "birthDate" in e,
-    );
-    if (hadBirth) {
+    const needsRewrite = parsed.some((e) => {
+      if (!e || typeof e !== "object") return true;
+      const rec = e as EmployeeRosterRecord & { birthDate?: string };
+      return (
+        "birthDate" in rec ||
+        typeof rec.titleYears !== "number" ||
+        !Number.isFinite(rec.titleYears)
+      );
+    });
+    if (needsRewrite) {
       window.localStorage.setItem(
         EMPLOYEES_STORAGE_KEY,
         JSON.stringify(cleaned),

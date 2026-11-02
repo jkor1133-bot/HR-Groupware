@@ -64,7 +64,20 @@ export function EmployeePicker({
           return;
         }
         const emp = sorted.find((x) => x.id === raw) ?? null;
-        onChange(emp?.name ?? "", emp);
+        // 최신 필드(직위년차 등)가 빠지지 않도록 복사본 전달
+        onChange(
+          emp?.name ?? "",
+          emp
+            ? {
+                ...emp,
+                titleYears:
+                  typeof emp.titleYears === "number" &&
+                  Number.isFinite(emp.titleYears)
+                    ? emp.titleYears
+                    : Number(emp.titleYears) || 1,
+              }
+            : null,
+        );
       }}
     >
       <option value="">{placeholder}</option>

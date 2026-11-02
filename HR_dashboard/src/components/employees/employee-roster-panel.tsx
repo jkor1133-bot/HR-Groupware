@@ -24,8 +24,8 @@ import {
 } from "@/lib/employee-roster";
 import {
   cellDate,
-  cellNum,
   cellStr,
+  cellTitleYears,
   downloadRowsAsExcel,
   readExcelFile,
 } from "@/lib/excel";
@@ -227,7 +227,7 @@ export function EmployeeRosterPanel() {
           jobRole: cellStr(row, "직책", "jobRole") || "팀원",
           jobTrack: cellStr(row, "직군", "jobTrack") || "일반직",
           gender: cellStr(row, "성별", "gender") || "남자",
-          titleYears: cellNum(row, "직위년차", "titleYears") || 1,
+          titleYears: cellTitleYears(row, 1),
           groupHireDate: cellDate(
             row,
             "그룹입사일자",
