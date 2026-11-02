@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo } from "react";
 import {
+  BookUser,
   CalendarDays,
   ClipboardList,
   FolderKanban,
@@ -37,6 +38,7 @@ const MENU_ICONS: Record<AppMenuId, LucideIcon> = {
   "/": Home,
   "/calendar": CalendarDays,
   "/weekly-plans": ClipboardList,
+  "/employees": BookUser,
   "/hr-records": FolderKanban,
   "/raci": Table2,
   "/workflows": GitBranch,

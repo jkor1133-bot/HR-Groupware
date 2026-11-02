@@ -10,6 +10,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { EmployeePicker } from "@/components/employees/employee-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -281,13 +282,23 @@ export function ContractsDbPanel({
 
       <div className="mb-4 grid gap-2 @md/app:grid-cols-3 @4xl/app:grid-cols-4 @6xl/app:grid-cols-8">
         <div className="grid gap-1">
-          <Label>성명</Label>
-          <Input
+          <Label>성명 (사원명부)</Label>
+          <EmployeePicker
             value={cForm.employeeName}
             disabled={!editing}
-            onChange={(e) =>
-              setCForm({ ...cForm, employeeName: e.target.value })
-            }
+            onChange={(name, emp) => {
+              const track = emp?.jobTrack;
+              const asJob =
+                track &&
+                (TRACKS as readonly string[]).includes(track)
+                  ? (track as JobTrack)
+                  : cForm.jobTrack;
+              setCForm({
+                ...cForm,
+                employeeName: name,
+                jobTrack: contractTrackOnly ? "계약직" : asJob,
+              });
+            }}
           />
         </div>
         <div className="grid gap-1">

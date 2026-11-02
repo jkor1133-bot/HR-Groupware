@@ -245,6 +245,33 @@ export type PermitRecord = {
   note: string;
 };
 
+/** 사원명부 */
+export type EmployeeRosterRecord = {
+  id: string;
+  /** 상위부서 */
+  division: string;
+  /** 부서 */
+  department: string;
+  /** 사번 */
+  empNo: string;
+  /** 성명 */
+  name: string;
+  /** 직위 */
+  title: string;
+  /** 직책 */
+  jobRole: string;
+  /** 직군 */
+  jobTrack: string;
+  /** 성별 */
+  gender: string;
+  /** 직위년차 */
+  titleYears: number;
+  /** 그룹입사일자 YYYY-MM-DD */
+  groupHireDate: string;
+  /** 입사일자 YYYY-MM-DD */
+  hireDate: string;
+};
+
 /** 인사총무 이력 · 승진 발령 */
 export type PromotionRecord = {
   id: string;

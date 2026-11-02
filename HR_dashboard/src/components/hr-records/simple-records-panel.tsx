@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Download, Pencil, Plus, Save, Trash2, Upload, X } from "lucide-react";
+import { EmployeePicker } from "@/components/employees/employee-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +18,7 @@ import {
 export type FieldDef = {
   key: string;
   label: string;
-  type?: "text" | "date" | "number";
+  type?: "text" | "date" | "number" | "employee";
   required?: boolean;
   excelKeys?: string[];
 };
@@ -30,6 +31,14 @@ type Props<T extends { id: string }> = {
   fields: FieldDef[];
   excelFileName: string;
   idPrefix: string;
+  /**
+   * 사원명부 연동: 성명(employee) 선택 시 소속 필드 자동 채움.
+   * nameKey 기본 employeeName, teamKey 기본 team
+   */
+  employeeLink?: {
+    nameKey?: string;
+    teamKey?: string;
+  };
 };
 
 function emptyForm(fields: FieldDef[]) {
@@ -50,6 +59,7 @@ export function SimpleRecordsPanel<T extends { id: string }>({
   fields,
   excelFileName,
   idPrefix,
+  employeeLink,
 }: Props<T>) {
   const list = useLocalList(storageKey, seedFn);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -57,6 +67,9 @@ export function SimpleRecordsPanel<T extends { id: string }>({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<T[] | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
+  const nameKey = employeeLink?.nameKey ?? "employeeName";
+  const teamKey = employeeLink?.teamKey ?? "team";
+  const linkEnabled = Boolean(employeeLink);
 
   useEffect(() => {
     if (!editing) setDraft(null);
@@ -249,24 +262,44 @@ export function SimpleRecordsPanel<T extends { id: string }>({
           gridTemplateColumns: `repeat(auto-fill, minmax(9rem, 1fr))`,
         }}
       >
-        {fields.map((f) => (
+        {fields.map((f) => {
+          const isEmployeeField =
+            linkEnabled &&
+            (f.type === "employee" || f.key === nameKey);
+          return (
           <div key={f.key} className="grid gap-1">
             <Label>{f.label}</Label>
-            <Input
-              type={
-                f.type === "date"
-                  ? "date"
-                  : f.type === "number"
-                    ? "number"
-                    : "text"
-              }
-              value={form[f.key] ?? ""}
-              onChange={(e) =>
-                setForm({ ...form, [f.key]: e.target.value })
-              }
-            />
+            {isEmployeeField ? (
+              <EmployeePicker
+                value={form[f.key] ?? ""}
+                onChange={(name, emp) => {
+                  setForm((prev) => ({
+                    ...prev,
+                    [f.key]: name,
+                    ...(emp && teamKey
+                      ? { [teamKey]: emp.department || emp.division }
+                      : {}),
+                  }));
+                }}
+              />
+            ) : (
+              <Input
+                type={
+                  f.type === "date"
+                    ? "date"
+                    : f.type === "number"
+                      ? "number"
+                      : "text"
+                }
+                value={form[f.key] ?? ""}
+                onChange={(e) =>
+                  setForm({ ...form, [f.key]: e.target.value })
+                }
+              />
+            )}
           </div>
-        ))}
+          );
+        })}
         <div className="flex items-end">
           <Button className="w-full" onClick={addRow}>
             <Plus data-icon="inline-start" />
@@ -304,29 +337,57 @@ export function SimpleRecordsPanel<T extends { id: string }>({
                     const v = (
                       item as unknown as Record<string, string | number>
                     )[f.key];
+                    const isEmployeeField =
+                      linkEnabled &&
+                      (f.type === "employee" || f.key === nameKey);
                     return (
                       <td key={f.key} className="px-2 py-1.5">
                         {editing ? (
-                          <Input
-                            type={
-                              f.type === "date"
-                                ? "date"
-                                : f.type === "number"
-                                  ? "number"
-                                  : "text"
-                            }
-                            className="h-8 min-w-[6rem] px-2 text-sm"
-                            value={v ?? ""}
-                            onChange={(e) =>
-                              patchRow(
-                                item.id,
-                                f.key,
-                                f.type === "number"
-                                  ? Number(e.target.value) || 0
-                                  : e.target.value,
-                              )
-                            }
-                          />
+                          isEmployeeField ? (
+                            <EmployeePicker
+                              value={String(v ?? "")}
+                              onChange={(name, emp) => {
+                                setDraft((prev) => {
+                                  const base =
+                                    prev ?? cloneItems(list.items);
+                                  return base.map((row) => {
+                                    if (row.id !== item.id) return row;
+                                    const next = {
+                                      ...(row as object),
+                                      [f.key]: name,
+                                    } as T;
+                                    if (emp && teamKey) {
+                                      (next as Record<string, unknown>)[
+                                        teamKey
+                                      ] = emp.department || emp.division;
+                                    }
+                                    return next;
+                                  });
+                                });
+                              }}
+                            />
+                          ) : (
+                            <Input
+                              type={
+                                f.type === "date"
+                                  ? "date"
+                                  : f.type === "number"
+                                    ? "number"
+                                    : "text"
+                              }
+                              className="h-8 min-w-[6rem] px-2 text-sm"
+                              value={v ?? ""}
+                              onChange={(e) =>
+                                patchRow(
+                                  item.id,
+                                  f.key,
+                                  f.type === "number"
+                                    ? Number(e.target.value) || 0
+                                    : e.target.value,
+                                )
+                              }
+                            />
+                          )
                         ) : (
                           <span className="text-muted-foreground first:font-medium first:text-foreground">
                             {f.type === "number" && typeof v === "number"

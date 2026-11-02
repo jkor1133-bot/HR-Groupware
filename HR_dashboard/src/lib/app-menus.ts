@@ -6,6 +6,7 @@ export type AppMenuId =
   | "/"
   | "/calendar"
   | "/weekly-plans"
+  | "/employees"
   | "/hr-records"
   | "/raci"
   | "/workflows"
@@ -20,6 +21,7 @@ export const APP_MENUS: AppMenuDef[] = [
   { href: "/", label: "홈" },
   { href: "/calendar", label: "Calendar" },
   { href: "/weekly-plans", label: "주간업무" },
+  { href: "/employees", label: "사원명부" },
   { href: "/hr-records", label: "인사총무 이력" },
   { href: "/raci", label: "RACI" },
   { href: "/workflows", label: "업무기술서" },

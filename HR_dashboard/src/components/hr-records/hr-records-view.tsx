@@ -111,13 +111,19 @@ function PromotionsSection() {
       ) : (
         <SimpleRecordsPanel<PromotionRecord>
           title="승진 발령 이력"
-          description="승진 발령 건을 등록·관리합니다."
+          description="승진 발령 건을 등록·관리합니다. 성명은 사원명부에서 선택할 수 있습니다."
           storageKey="hr-dashboard-promotions-v2"
           seedFn={seedPromotions}
           idPrefix="pr"
           excelFileName="승진발령이력.xlsx"
+          employeeLink={{ nameKey: "employeeName", teamKey: "team" }}
           fields={[
-            { key: "employeeName", label: "성명", required: true },
+            {
+              key: "employeeName",
+              label: "성명",
+              type: "employee",
+              required: true,
+            },
             { key: "team", label: "소속", required: true },
             { key: "fromTitle", label: "승진 전", required: true },
             { key: "toTitle", label: "승진 후", required: true },
@@ -200,13 +206,19 @@ export function HrRecordsView({
         return (
           <SimpleRecordsPanel<AwardRecord>
             title="포상현황"
-            description="포상·표창 이력을 등록·관리합니다."
+            description="포상·표창 이력을 등록·관리합니다. 성명은 사원명부에서 선택할 수 있습니다."
             storageKey="hr-dashboard-awards-v1"
             seedFn={seedAwards}
             idPrefix="aw"
             excelFileName="포상현황.xlsx"
+            employeeLink={{ nameKey: "employeeName", teamKey: "team" }}
             fields={[
-              { key: "employeeName", label: "성명", required: true },
+              {
+                key: "employeeName",
+                label: "성명",
+                type: "employee",
+                required: true,
+              },
               { key: "team", label: "소속", required: true },
               { key: "awardName", label: "포상명", required: true },
               {
@@ -223,13 +235,19 @@ export function HrRecordsView({
         return (
           <SimpleRecordsPanel<QualificationAllowanceRecord>
             title="자격수당 현황"
-            description="자격수당 지급 대상을 등록·관리합니다."
+            description="자격수당 지급 대상을 등록·관리합니다. 성명은 사원명부에서 선택할 수 있습니다."
             storageKey="hr-dashboard-qual-allowances-v1"
             seedFn={seedQualificationAllowances}
             idPrefix="qa"
             excelFileName="자격수당현황.xlsx"
+            employeeLink={{ nameKey: "employeeName", teamKey: "team" }}
             fields={[
-              { key: "employeeName", label: "성명", required: true },
+              {
+                key: "employeeName",
+                label: "성명",
+                type: "employee",
+                required: true,
+              },
               { key: "team", label: "소속", required: true },
               { key: "qualification", label: "자격", required: true },
               {
@@ -294,15 +312,21 @@ export function HrRecordsView({
         return (
           <SimpleRecordsPanel<CompanyVehicleRecord>
             title="업무용 차량 현황"
-            description="업무용 차량 배정 현황을 등록·관리합니다."
+            description="업무용 차량 배정 현황을 등록·관리합니다. 사용자는 사원명부에서 선택할 수 있습니다."
             storageKey="hr-dashboard-vehicles-v1"
             seedFn={seedCompanyVehicles}
             idPrefix="cv"
             excelFileName="업무용차량현황.xlsx"
+            employeeLink={{ nameKey: "assignee", teamKey: "team" }}
             fields={[
               { key: "plateNo", label: "차량번호", required: true },
               { key: "model", label: "차종", required: true },
-              { key: "assignee", label: "사용자", required: true },
+              {
+                key: "assignee",
+                label: "사용자",
+                type: "employee",
+                required: true,
+              },
               { key: "team", label: "소속", required: true },
               {
                 key: "acquiredDate",
@@ -318,13 +342,19 @@ export function HrRecordsView({
         return (
           <SimpleRecordsPanel<OverseasTrainingRecord>
             title="해외연수 현황"
-            description="해외연수·출장 교육 이력을 등록·관리합니다."
+            description="해외연수·출장 교육 이력을 등록·관리합니다. 성명은 사원명부에서 선택할 수 있습니다."
             storageKey="hr-dashboard-overseas-v1"
             seedFn={seedOverseasTrainings}
             idPrefix="ot"
             excelFileName="해외연수현황.xlsx"
+            employeeLink={{ nameKey: "employeeName", teamKey: "team" }}
             fields={[
-              { key: "employeeName", label: "성명", required: true },
+              {
+                key: "employeeName",
+                label: "성명",
+                type: "employee",
+                required: true,
+              },
               { key: "team", label: "소속", required: true },
               { key: "country", label: "국가", required: true },
               { key: "program", label: "과정", required: true },
@@ -343,13 +373,19 @@ export function HrRecordsView({
         return (
           <SimpleRecordsPanel<PcAssignmentRecord>
             title="PC 지급 현황"
-            description="업무용 PC·노트북 지급 이력을 등록·관리합니다."
+            description="업무용 PC·노트북 지급 이력을 등록·관리합니다. 성명은 사원명부에서 선택할 수 있습니다."
             storageKey="hr-dashboard-pcs-v1"
             seedFn={seedPcAssignments}
             idPrefix="pc"
             excelFileName="PC지급현황.xlsx"
+            employeeLink={{ nameKey: "employeeName", teamKey: "team" }}
             fields={[
-              { key: "employeeName", label: "성명", required: true },
+              {
+                key: "employeeName",
+                label: "성명",
+                type: "employee",
+                required: true,
+              },
               { key: "team", label: "소속", required: true },
               { key: "assetTag", label: "자산번호", required: true },
               { key: "model", label: "모델", required: true },

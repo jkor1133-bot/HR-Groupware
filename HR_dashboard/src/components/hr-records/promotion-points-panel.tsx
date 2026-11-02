@@ -11,11 +11,17 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { EmployeePicker } from "@/components/employees/employee-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { seedPromotionPoints } from "@/data/promotion-points-seed";
-import { ORG_DIVISIONS, ORG_TEAMS, TEAMS_BY_DIVISION } from "@/data/org";
+import {
+  ORG_DIVISIONS,
+  ORG_TEAMS,
+  TEAM_DIVISION,
+  TEAMS_BY_DIVISION,
+} from "@/data/org";
 import { useLocalList } from "@/hooks/use-local-list";
 import {
   cellDate,
@@ -42,6 +48,7 @@ import {
 } from "@/lib/promotion-rules";
 import { seedPromotions } from "@/data/hr-records-seed";
 import type {
+  EmployeeRosterRecord,
   OrgDivision,
   OrgTeam,
   PromotionPointRecord,
@@ -56,6 +63,57 @@ function emptyGrades(years: number[]): Record<string, string> {
 
 function cloneItems(items: PromotionPointRecord[]) {
   return JSON.parse(JSON.stringify(items)) as PromotionPointRecord[];
+}
+
+/** 사원명부 → 승진포인트 추가 폼 값 */
+function formFromEmployee(
+  emp: EmployeeRosterRecord,
+  prev: {
+    division: OrgDivision;
+    team: OrgTeam;
+    name: string;
+    jobRole: string;
+    title: string;
+    titleYears: string;
+    hireDate: string;
+    note: string;
+  },
+) {
+  let division = prev.division;
+  const dept = emp.department as OrgTeam;
+  if (ORG_DIVISIONS.includes(emp.division as OrgDivision)) {
+    division = emp.division as OrgDivision;
+  } else if (ORG_TEAMS.includes(dept) && TEAM_DIVISION[dept]) {
+    division = TEAM_DIVISION[dept];
+  }
+
+  const teamList = TEAMS_BY_DIVISION[division] ?? ORG_TEAMS;
+  let team = prev.team;
+  if (teamList.includes(dept)) {
+    team = dept;
+  } else if (ORG_TEAMS.includes(dept)) {
+    division = TEAM_DIVISION[dept] ?? division;
+    team = dept;
+  }
+
+  const hireDate = emp.hireDate || emp.groupHireDate || prev.hireDate;
+  const title = emp.title?.trim() || prev.title;
+  const jobRole = emp.jobRole?.trim() || prev.jobRole;
+  const years = Number(emp.titleYears);
+
+  return {
+    ...prev,
+    name: emp.name,
+    division,
+    team,
+    title,
+    jobRole,
+    hireDate,
+    titleYears:
+      Number.isFinite(years) && years >= 0
+        ? String(years)
+        : prev.titleYears,
+  };
 }
 
 function EligibilityBadge({
@@ -500,14 +558,23 @@ export function PromotionPointsPanel({
               {teams.map((t) => (
                 <option key={t}>{t}</option>
               ))}
+              {teams.includes(form.team) ? null : (
+                <option value={form.team}>{form.team}</option>
+              )}
             </select>
           </div>
           <div className="grid gap-1">
-            <Label>성명</Label>
-            <Input
+            <Label>성명 (사원명부)</Label>
+            <EmployeePicker
               value={form.name}
               disabled={!editing}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="사원 선택"
+              onChange={(name, emp) => {
+                setForm((prev) => {
+                  if (!emp) return { ...prev, name };
+                  return formFromEmployee(emp, prev);
+                });
+              }}
             />
           </div>
           <div className="grid gap-1">
@@ -521,6 +588,11 @@ export function PromotionPointsPanel({
               {PROMOTION_ROLES.map((r) => (
                 <option key={r}>{r}</option>
               ))}
+              {(PROMOTION_ROLES as readonly string[]).includes(form.jobRole)
+                ? null
+                : form.jobRole
+                  ? <option value={form.jobRole}>{form.jobRole}</option>
+                  : null}
             </select>
           </div>
           <div className="grid gap-1">
@@ -534,6 +606,11 @@ export function PromotionPointsPanel({
               {PROMOTION_TITLES.map((t) => (
                 <option key={t}>{t}</option>
               ))}
+              {(PROMOTION_TITLES as readonly string[]).includes(form.title)
+                ? null
+                : form.title
+                  ? <option value={form.title}>{form.title}</option>
+                  : null}
             </select>
           </div>
           <div className="grid gap-1">

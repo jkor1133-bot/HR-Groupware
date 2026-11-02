@@ -1,11 +1,31 @@
 import * as XLSX from "xlsx";
 
+/**
+ * rows가 비어 있어도 headerKeys가 있으면 헤더만 있는 양식 시트를 만듭니다.
+ */
 export function downloadRowsAsExcel(
   rows: Record<string, unknown>[],
   filename: string,
   sheetName = "Sheet1",
+  headerKeys?: string[],
 ) {
-  const ws = XLSX.utils.json_to_sheet(rows);
+  const headers =
+    headerKeys?.length
+      ? headerKeys
+      : rows[0]
+        ? Object.keys(rows[0])
+        : [];
+
+  let ws: XLSX.WorkSheet;
+  if (rows.length === 0) {
+    ws = XLSX.utils.aoa_to_sheet(headers.length ? [headers] : [[]]);
+  } else {
+    ws = XLSX.utils.json_to_sheet(
+      rows,
+      headers.length ? { header: headers } : undefined,
+    );
+  }
+
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
   XLSX.writeFile(wb, filename.endsWith(".xlsx") ? filename : `${filename}.xlsx`);
