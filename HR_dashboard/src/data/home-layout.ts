@@ -55,7 +55,7 @@ export const HR_WIDGET_META: Record<
   },
   hr_compensation: {
     label: "전사 인건비·근무시간",
-    description: "당월/누계 실적 KPI 2칸",
+    description: "당월/누계 KPI · 월별·연도별 추이",
   },
   hr_org: {
     label: "인건비·근무시간 비교",

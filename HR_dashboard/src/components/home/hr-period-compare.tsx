@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import {
   buildPlanDiffRows,
   buildYoYRows,
@@ -9,8 +10,10 @@ import {
   formatRate,
   periodLabel,
   type PeriodMode,
+  type PlanDiffRow,
+  type YoYRow,
 } from "@/lib/team-period-metrics";
-import type { TeamPeriodMetric } from "@/lib/types";
+import type { OrgTeam, TeamPeriodMetric } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Unit = "million" | "hours";
@@ -82,13 +85,64 @@ function ModeTabs({
   );
 }
 
+function FragmentRows({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
+}
+
+function useOpenSet() {
+  const [open, setOpen] = useState<Set<string>>(() => new Set());
+  function toggle(key: string) {
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+  return { open, toggle };
+}
+
+function ExpandLabel({
+  expanded,
+  label,
+  onToggle,
+  className,
+}: {
+  expanded: boolean;
+  label: string;
+  onToggle: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={cn(
+        "inline-flex items-center gap-1 font-medium hover:text-dh-real",
+        className,
+      )}
+    >
+      {expanded ? (
+        <ChevronDown className="size-3.5 shrink-0" />
+      ) : (
+        <ChevronRight className="size-3.5 shrink-0" />
+      )}
+      {label}
+    </button>
+  );
+}
+
 function PlanDiffTable({
   rows,
   unit,
+  showHourDetails,
 }: {
-  rows: ReturnType<typeof buildPlanDiffRows>;
+  rows: PlanDiffRow[];
   unit: Unit;
+  showHourDetails?: boolean;
 }) {
+  const { open, toggle } = useOpenSet();
+
   const totals = rows.reduce(
     (a, r) => ({
       plan: a.plan + r.plan,
@@ -115,19 +169,112 @@ function PlanDiffTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.team} className="border-b border-border/60">
-              <td className="px-2 py-1.5 text-foreground">{r.team}</td>
-              <td className="px-2 py-1.5 tabular-nums">
-                {fmt(r.plan, unit)}
-              </td>
-              <td className="px-2 py-1.5 tabular-nums">
-                {fmt(r.actual, unit)}
-              </td>
-              <DiffCell value={r.diff} unit={unit} />
-              <RateCell rate={r.rate} />
-            </tr>
-          ))}
+          {rows.map((r) => {
+            const hasParts = r.parts.length > 0;
+            const hasTeamDetails =
+              showHourDetails && !hasParts && r.details.length > 0;
+            const expandable = hasParts || hasTeamDetails;
+            const teamOpen = open.has(r.team);
+            return (
+              <FragmentRows key={r.team}>
+                <tr className="border-b border-border/60">
+                  <td className="px-2 py-1.5 text-foreground">
+                    {expandable ? (
+                      <ExpandLabel
+                        expanded={teamOpen}
+                        label={r.team}
+                        onToggle={() => toggle(r.team)}
+                      />
+                    ) : (
+                      r.team
+                    )}
+                  </td>
+                  <td className="px-2 py-1.5 tabular-nums">
+                    {fmt(r.plan, unit)}
+                  </td>
+                  <td className="px-2 py-1.5 tabular-nums">
+                    {fmt(r.actual, unit)}
+                  </td>
+                  <DiffCell value={r.diff} unit={unit} />
+                  <RateCell rate={r.rate} />
+                </tr>
+                {teamOpen && hasTeamDetails
+                  ? r.details.map((d) => (
+                      <tr
+                        key={`${r.team}-${d.key}`}
+                        className="border-b border-border/30 bg-muted/15"
+                      >
+                        <td className="px-2 py-1 pl-8 text-muted-foreground">
+                          {d.label}
+                        </td>
+                        <td className="px-2 py-1 tabular-nums">
+                          {fmt(d.plan, unit)}
+                        </td>
+                        <td className="px-2 py-1 tabular-nums">
+                          {fmt(d.actual, unit)}
+                        </td>
+                        <DiffCell value={d.diff} unit={unit} />
+                        <RateCell rate={d.rate} />
+                      </tr>
+                    ))
+                  : null}
+                {teamOpen && hasParts
+                  ? r.parts.map((p) => {
+                      const partKey = `${r.team}::${p.part}`;
+                      const partOpen = open.has(partKey);
+                      const canExpandPart =
+                        showHourDetails && p.details.length > 0;
+                      return (
+                        <FragmentRows key={partKey}>
+                          <tr className="border-b border-border/40 bg-muted/20">
+                            <td className="px-2 py-1.5 pl-5 text-muted-foreground">
+                              {canExpandPart ? (
+                                <ExpandLabel
+                                  expanded={partOpen}
+                                  label={p.part}
+                                  onToggle={() => toggle(partKey)}
+                                  className="font-normal"
+                                />
+                              ) : (
+                                <span className="pl-4">{p.part}</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-1.5 tabular-nums">
+                              {fmt(p.plan, unit)}
+                            </td>
+                            <td className="px-2 py-1.5 tabular-nums">
+                              {fmt(p.actual, unit)}
+                            </td>
+                            <DiffCell value={p.diff} unit={unit} />
+                            <RateCell rate={p.rate} />
+                          </tr>
+                          {partOpen && canExpandPart
+                            ? p.details.map((d) => (
+                                <tr
+                                  key={`${partKey}-${d.key}`}
+                                  className="border-b border-border/30 bg-muted/10"
+                                >
+                                  <td className="px-2 py-1 pl-12 text-muted-foreground">
+                                    {d.label}
+                                  </td>
+                                  <td className="px-2 py-1 tabular-nums">
+                                    {fmt(d.plan, unit)}
+                                  </td>
+                                  <td className="px-2 py-1 tabular-nums">
+                                    {fmt(d.actual, unit)}
+                                  </td>
+                                  <DiffCell value={d.diff} unit={unit} />
+                                  <RateCell rate={d.rate} />
+                                </tr>
+                              ))
+                            : null}
+                        </FragmentRows>
+                      );
+                    })
+                  : null}
+              </FragmentRows>
+            );
+          })}
         </tbody>
         <tfoot>
           <tr className="border-t border-border font-semibold text-dh-deep dark:text-dh-light">
@@ -150,10 +297,14 @@ function PlanDiffTable({
 function YoYTable({
   rows,
   unit,
+  showHourDetails,
 }: {
-  rows: ReturnType<typeof buildYoYRows>;
+  rows: YoYRow[];
   unit: Unit;
+  showHourDetails?: boolean;
 }) {
+  const { open, toggle } = useOpenSet();
+
   const totals = rows.reduce(
     (a, r) => ({
       prev: a.prev + r.prev,
@@ -180,19 +331,112 @@ function YoYTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.team} className="border-b border-border/60">
-              <td className="px-2 py-1.5 text-foreground">{r.team}</td>
-              <td className="px-2 py-1.5 tabular-nums">
-                {fmt(r.prev, unit)}
-              </td>
-              <td className="px-2 py-1.5 tabular-nums">
-                {fmt(r.curr, unit)}
-              </td>
-              <DiffCell value={r.diff} unit={unit} />
-              <RateCell rate={r.rate} />
-            </tr>
-          ))}
+          {rows.map((r) => {
+            const hasParts = r.parts.length > 0;
+            const hasTeamDetails =
+              showHourDetails && !hasParts && r.details.length > 0;
+            const expandable = hasParts || hasTeamDetails;
+            const teamOpen = open.has(r.team);
+            return (
+              <FragmentRows key={r.team}>
+                <tr className="border-b border-border/60">
+                  <td className="px-2 py-1.5 text-foreground">
+                    {expandable ? (
+                      <ExpandLabel
+                        expanded={teamOpen}
+                        label={r.team}
+                        onToggle={() => toggle(r.team)}
+                      />
+                    ) : (
+                      r.team
+                    )}
+                  </td>
+                  <td className="px-2 py-1.5 tabular-nums">
+                    {fmt(r.prev, unit)}
+                  </td>
+                  <td className="px-2 py-1.5 tabular-nums">
+                    {fmt(r.curr, unit)}
+                  </td>
+                  <DiffCell value={r.diff} unit={unit} />
+                  <RateCell rate={r.rate} />
+                </tr>
+                {teamOpen && hasTeamDetails
+                  ? r.details.map((d) => (
+                      <tr
+                        key={`${r.team}-${d.key}`}
+                        className="border-b border-border/30 bg-muted/15"
+                      >
+                        <td className="px-2 py-1 pl-8 text-muted-foreground">
+                          {d.label}
+                        </td>
+                        <td className="px-2 py-1 tabular-nums">
+                          {fmt(d.prev, unit)}
+                        </td>
+                        <td className="px-2 py-1 tabular-nums">
+                          {fmt(d.curr, unit)}
+                        </td>
+                        <DiffCell value={d.diff} unit={unit} />
+                        <RateCell rate={d.rate} />
+                      </tr>
+                    ))
+                  : null}
+                {teamOpen && hasParts
+                  ? r.parts.map((p) => {
+                      const partKey = `${r.team}::${p.part}`;
+                      const partOpen = open.has(partKey);
+                      const canExpandPart =
+                        showHourDetails && p.details.length > 0;
+                      return (
+                        <FragmentRows key={partKey}>
+                          <tr className="border-b border-border/40 bg-muted/20">
+                            <td className="px-2 py-1.5 pl-5 text-muted-foreground">
+                              {canExpandPart ? (
+                                <ExpandLabel
+                                  expanded={partOpen}
+                                  label={p.part}
+                                  onToggle={() => toggle(partKey)}
+                                  className="font-normal"
+                                />
+                              ) : (
+                                <span className="pl-4">{p.part}</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-1.5 tabular-nums">
+                              {fmt(p.prev, unit)}
+                            </td>
+                            <td className="px-2 py-1.5 tabular-nums">
+                              {fmt(p.curr, unit)}
+                            </td>
+                            <DiffCell value={p.diff} unit={unit} />
+                            <RateCell rate={p.rate} />
+                          </tr>
+                          {partOpen && canExpandPart
+                            ? p.details.map((d) => (
+                                <tr
+                                  key={`${partKey}-${d.key}`}
+                                  className="border-b border-border/30 bg-muted/10"
+                                >
+                                  <td className="px-2 py-1 pl-12 text-muted-foreground">
+                                    {d.label}
+                                  </td>
+                                  <td className="px-2 py-1 tabular-nums">
+                                    {fmt(d.prev, unit)}
+                                  </td>
+                                  <td className="px-2 py-1 tabular-nums">
+                                    {fmt(d.curr, unit)}
+                                  </td>
+                                  <DiffCell value={d.diff} unit={unit} />
+                                  <RateCell rate={d.rate} />
+                                </tr>
+                              ))
+                            : null}
+                        </FragmentRows>
+                      );
+                    })
+                  : null}
+              </FragmentRows>
+            );
+          })}
         </tbody>
         <tfoot>
           <tr className="border-t border-border font-semibold text-dh-deep dark:text-dh-light">
@@ -244,7 +488,7 @@ function CompareCard({
         </div>
         <ModeTabs mode={mode} onChange={onModeChange} />
       </div>
-      <div className="max-h-[320px] overflow-auto p-2">{children}</div>
+      <div className="max-h-[420px] overflow-auto p-2">{children}</div>
     </section>
   );
 }
@@ -255,24 +499,32 @@ export function HrPeriodCompareBlock({
   unitLabel,
   rows,
   asOf,
+  teams,
 }: {
   topic: string;
   unit: Unit;
   unitLabel: string;
   rows: TeamPeriodMetric[];
-  /** 기준월 (미지정 시 오늘) */
   asOf?: Date;
+  teams?: readonly OrgTeam[];
 }) {
   const [mode, setMode] = useState<PeriodMode>("month");
   const asOfDate = asOf ?? new Date();
+  const showHourDetails = unit === "hours";
 
   const planRows = useMemo(
-    () => buildPlanDiffRows(rows, mode, asOfDate),
-    [rows, mode, asOfDate],
+    () =>
+      buildPlanDiffRows(rows, mode, asOfDate, teams, {
+        hourDetails: showHourDetails,
+      }),
+    [rows, mode, asOfDate, teams, showHourDetails],
   );
   const yoyRows = useMemo(
-    () => buildYoYRows(rows, mode, asOfDate),
-    [rows, mode, asOfDate],
+    () =>
+      buildYoYRows(rows, mode, asOfDate, teams, {
+        hourDetails: showHourDetails,
+      }),
+    [rows, mode, asOfDate, teams, showHourDetails],
   );
 
   return (
@@ -282,24 +534,32 @@ export function HrPeriodCompareBlock({
       </p>
       <div className="grid gap-3 @md/app:grid-cols-2">
         <CompareCard
-          eyebrow="팀별 실적비교"
+          eyebrow={showHourDetails ? "팀·파트·시간유형" : "팀·파트 실적비교"}
           title="계획대비 차이"
           mode={mode}
           onModeChange={setMode}
           unitLabel={unitLabel}
           asOf={asOfDate}
         >
-          <PlanDiffTable rows={planRows} unit={unit} />
+          <PlanDiffTable
+            rows={planRows}
+            unit={unit}
+            showHourDetails={showHourDetails}
+          />
         </CompareCard>
         <CompareCard
-          eyebrow="팀별 실적비교"
+          eyebrow={showHourDetails ? "팀·파트·시간유형" : "팀·파트 실적비교"}
           title="전년 실적비교"
           mode={mode}
           onModeChange={setMode}
           unitLabel={unitLabel}
           asOf={asOfDate}
         >
-          <YoYTable rows={yoyRows} unit={unit} />
+          <YoYTable
+            rows={yoyRows}
+            unit={unit}
+            showHourDetails={showHourDetails}
+          />
         </CompareCard>
       </div>
     </div>

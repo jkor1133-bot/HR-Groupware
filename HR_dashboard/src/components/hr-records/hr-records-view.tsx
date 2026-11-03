@@ -6,6 +6,7 @@ import { ContractsDbPanel } from "@/components/hr-records/contracts-db-panel";
 import { PermitsDbPanel } from "@/components/hr-records/permits-db-panel";
 import { PromotionPointsPanel } from "@/components/hr-records/promotion-points-panel";
 import { SimpleRecordsPanel } from "@/components/hr-records/simple-records-panel";
+import { StaffMovementsPanel } from "@/components/hr-records/staff-movements-panel";
 import {
   seedAwards,
   seedCompanyVehicles,
@@ -47,6 +48,7 @@ const MAIN_TABS: { id: MainTab; label: string }[] = [
 const SUB_TABS: Record<MainTab, SubTab[]> = {
   hr: [
     { id: "promotions", label: "승진현황" },
+    { id: "staff-movements", label: "입퇴사자 현황" },
     { id: "awards", label: "포상현황" },
     { id: "allowances", label: "자격수당 현황" },
     { id: "contracts", label: "계약직 현황" },
@@ -202,6 +204,10 @@ export function HrRecordsView({
     switch (sub) {
       case "promotions":
         return <PromotionsSection />;
+      case "staff-movements":
+      case "turnover":
+      case "hires-leaves":
+        return <StaffMovementsPanel />;
       case "awards":
         return (
           <SimpleRecordsPanel<AwardRecord>

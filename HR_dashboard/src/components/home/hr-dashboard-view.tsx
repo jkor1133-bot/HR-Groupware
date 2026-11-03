@@ -1,39 +1,24 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import {
-  Download,
-  Filter,
-  RotateCcw,
-  Upload,
-  Users,
-} from "lucide-react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { Download, Filter, RotateCcw, Users } from "lucide-react";
 import { HrAttritionDonutPanel } from "@/components/home/hr-attrition-donut";
 import { HrCompanyMetricCard } from "@/components/home/hr-company-metric-card";
+import { HrOpsTrendChart } from "@/components/home/hr-ops-trend-chart";
 import { HrPeriodCompareBlock } from "@/components/home/hr-period-compare";
 import { TeamPeriodMetricsEditor } from "@/components/home/team-period-metrics-editor";
 import { Button } from "@/components/ui/button";
-import {
-  JOB_TRACKS,
-  LEAVE_REASONS,
-  ORG_DIVISIONS,
-  ORG_TEAMS,
-  TEAMS_BY_DIVISION,
-} from "@/data/org";
-import { seedHrEmployees } from "@/data/hr-master-seed";
+import { TEAMS_BY_DIVISION, WORK_HOURS_TEAMS } from "@/data/org";
 import {
   seedTeamHoursMetrics,
   seedTeamLaborMetrics,
 } from "@/data/hr-ops-seed";
+import { useEmployees } from "@/hooks/use-employees";
 import { useLocalList } from "@/hooks/use-local-list";
 import { useHomeLayout } from "@/hooks/use-home-layout";
-import {
-  cellDate,
-  cellNum,
-  cellStr,
-  downloadRowsAsExcel,
-  readExcelFile,
-} from "@/lib/excel";
+import { useStaffMovements } from "@/hooks/use-staff-movements";
+import { downloadRowsAsExcel } from "@/lib/excel";
 import {
   computeHrMetrics,
   emptyHrFilter,
@@ -43,20 +28,22 @@ import {
 } from "@/lib/hr-metrics";
 import { currentYearMonth } from "@/lib/period";
 import {
+  rosterFilterOptions,
+  rosterToHrEmployees,
+} from "@/lib/roster-to-hr";
+import { leaveMovementsToHrEmployees } from "@/lib/staff-movements";
+import {
   asOfFromYearMonth,
   buildCompanySlices,
+  copyPlanToMonths,
+  propagatePlanAcrossRestOfYear,
 } from "@/lib/team-period-metrics";
 import type {
-  Gender,
   HomeWidgetConfig,
   HomeWidgetId,
-  HrEmployee,
-  JobTrack,
-  LeaveReason,
   OrgDivision,
   OrgTeam,
 } from "@/lib/types";
-import { TEAM_DIVISION } from "@/data/org";
 import { cn } from "@/lib/utils";
 
 function widgetClass(size: HomeWidgetConfig["size"]) {
@@ -86,29 +73,104 @@ function KpiCard({
 }
 
 export function HrDashboardView() {
-  const employees = useLocalList("hr-dashboard-hr-master-v5", seedHrEmployees);
+  const roster = useEmployees();
+  const staffMovements = useStaffMovements();
   const labor = useLocalList(
-    "hr-dashboard-team-labor-v1",
+    "hr-dashboard-team-labor-v3",
     seedTeamLaborMetrics,
   );
   const workHours = useLocalList(
-    "hr-dashboard-team-hours-v1",
+    "hr-dashboard-team-hours-v4",
     seedTeamHoursMetrics,
   );
   const { hydrated: layoutHydrated, sortedHr } = useHomeLayout();
-  const [filter, setFilter] = useState<HrFilter>(emptyHrFilter);
+  const [filter, setFilter] = useState<HrFilter>(emptyHrFilter());
   const [metricMonth, setMetricMonth] = useState(() => currentYearMonth());
   const [showMetricEditors, setShowMetricEditors] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+
+  /** 근무시간 월 복제 마이그레이션 (순차 1회) */
+  useEffect(() => {
+    if (!workHours.hydrated) return;
+    let items = workHours.items;
+    let dirty = false;
+
+    const flag2027 = "hr-dashboard-hours-propagate-2027-01-full-v3";
+    const flag2026 = "hr-dashboard-hours-copy-2026-11-to-09-10-v1";
+
+    try {
+      if (
+        window.localStorage.getItem(flag2027) !== "1" &&
+        items.some((r) => r.yearMonth === "2027-01")
+      ) {
+        window.localStorage.removeItem(
+          "hr-dashboard-hours-propagate-2027-01-plan-v1",
+        );
+        window.localStorage.removeItem(
+          "hr-dashboard-hours-propagate-2027-01-plan-v2",
+        );
+        const res = propagatePlanAcrossRestOfYear(items, "2027-01");
+        items = res.items;
+        if (res.changed > 0) dirty = true;
+        window.localStorage.setItem(flag2027, "1");
+      }
+
+      if (
+        window.localStorage.getItem(flag2026) !== "1" &&
+        items.some((r) => r.yearMonth === "2026-11")
+      ) {
+        const res = copyPlanToMonths(items, "2026-11", [
+          "2026-09",
+          "2026-10",
+        ]);
+        items = res.items;
+        if (res.changed > 0) dirty = true;
+        window.localStorage.setItem(flag2026, "1");
+      }
+    } catch {
+      /* ignore */
+    }
+
+    if (dirty) {
+      workHours.replaceAll(items);
+    }
+  }, [workHours]);
 
   const metricAsOf = useMemo(
     () => asOfFromYearMonth(metricMonth),
     [metricMonth],
   );
 
+  const hrEmployees = useMemo(() => {
+    const active = rosterToHrEmployees(roster.items);
+    const leavers = leaveMovementsToHrEmployees(staffMovements.items);
+    return [...active, ...leavers];
+  }, [roster.items, staffMovements.items]);
+
+  const hiresThisYear = useMemo(() => {
+    const year = String(new Date().getFullYear());
+    return staffMovements.items.filter((m) => {
+      if (m.kind !== "hire" || !m.eventDate.startsWith(year)) return false;
+      if (filter.jobTrack !== "전체" && m.jobTrack !== filter.jobTrack) {
+        return false;
+      }
+      if (filter.division !== "전체" && m.division !== filter.division) {
+        return false;
+      }
+      if (filter.team !== "전체" && m.department !== filter.team) {
+        return false;
+      }
+      return true;
+    }).length;
+  }, [staffMovements.items, filter]);
+
+  const filterOpts = useMemo(
+    () => rosterFilterOptions(roster.items),
+    [roster.items],
+  );
+
   const metrics = useMemo(
-    () => computeHrMetrics(employees.items, filter),
-    [employees.items, filter],
+    () => computeHrMetrics(hrEmployees, filter),
+    [hrEmployees, filter],
   );
 
   const laborCompany = useMemo(
@@ -116,76 +178,53 @@ export function HrDashboardView() {
     [labor.items, metricAsOf],
   );
   const hoursCompany = useMemo(
-    () => buildCompanySlices(workHours.items, metricAsOf),
+    () => buildCompanySlices(workHours.items, metricAsOf, WORK_HOURS_TEAMS),
     [workHours.items, metricAsOf],
   );
 
   const teamOptions = useMemo(() => {
-    if (filter.division === "전체") return ORG_TEAMS;
-    return TEAMS_BY_DIVISION[filter.division] ?? ORG_TEAMS;
-  }, [filter.division]);
+    if (filter.division === "전체") return filterOpts.teams;
+    const byDiv = TEAMS_BY_DIVISION[filter.division as OrgDivision] as
+      | OrgTeam[]
+      | undefined;
+    if (byDiv?.length) {
+      const set = new Set<string>(byDiv);
+      for (const t of filterOpts.teams) {
+        if (
+          roster.items.some(
+            (r) => r.department === t && r.division === filter.division,
+          )
+        ) {
+          set.add(t);
+        }
+      }
+      return [...set].sort((a, b) => a.localeCompare(b, "ko"));
+    }
+    return filterOpts.teams.filter((t) =>
+      roster.items.some(
+        (r) => r.department === t && r.division === filter.division,
+      ),
+    );
+  }, [filter.division, filterOpts.teams, roster.items]);
 
-  async function onUpload(file?: File) {
-    if (!file) return;
-    const rows = await readExcelFile(file);
-    const next: HrEmployee[] = rows
-      .map((row, i) => {
-        const team = (cellStr(row, "팀", "team") || "인사총무팀") as OrgTeam;
-        const division = (cellStr(row, "본부", "division") ||
-          TEAM_DIVISION[team] ||
-          "경영지원본부") as OrgDivision;
-        const statusRaw = cellStr(row, "상태", "status");
-        const leaveDate = cellDate(row, "퇴사일", "leaveDate") || undefined;
-        const status =
-          statusRaw === "퇴사" || leaveDate ? "퇴사" : "재직";
-        const reasonRaw = cellStr(row, "퇴사사유", "leaveReason", "사유");
-        const leaveReason = (
-          LEAVE_REASONS.includes(reasonRaw as LeaveReason)
-            ? reasonRaw
-            : leaveDate
-              ? "기타"
-              : undefined
-        ) as LeaveReason | undefined;
-        return {
-          id: `emp-up-${Date.now()}-${i}`,
-          name: cellStr(row, "성명", "이름", "name"),
-          gender: (cellStr(row, "성별", "gender") === "여"
-            ? "여"
-            : "남") as Gender,
-          birthDate: cellDate(row, "생년월일", "birthDate") || "1990-01-01",
-          hireDate: cellDate(row, "입사일", "hireDate") || "2020-01-01",
-          leaveDate,
-          leaveReason,
-          status: status as HrEmployee["status"],
-          jobTrack: (cellStr(row, "직군", "jobTrack") || "일반직") as JobTrack,
-          division,
-          team: ORG_TEAMS.includes(team) ? team : "인사총무팀",
-          title: cellStr(row, "직위", "직급", "title") || "사원",
-          salary: cellNum(row, "연봉", "급여", "salary"),
-        };
-      })
-      .filter((e) => e.name);
-    if (next.length) employees.replaceAll(next);
-  }
-
-  function exportTemplate() {
+  function exportRosterSnapshot() {
     downloadRowsAsExcel(
-      employees.items.map((e) => ({
+      roster.items.map((e) => ({
+        상위부서: e.division,
+        부서: e.department,
+        파트: e.part,
+        사번: e.empNo,
         성명: e.name,
-        성별: e.gender,
-        생년월일: e.birthDate,
-        입사일: e.hireDate,
-        퇴사일: e.leaveDate ?? "",
-        퇴사사유: e.leaveReason ?? "",
-        상태: e.status,
-        직군: e.jobTrack,
-        본부: e.division,
-        팀: e.team,
         직위: e.title,
-        연봉: e.salary,
+        직책: e.jobRole,
+        직군: e.jobTrack,
+        성별: e.gender,
+        직위년차: e.titleYears,
+        그룹입사일자: e.groupHireDate,
+        입사일자: e.hireDate,
       })),
-      "hr-master.xlsx",
-      "인사마스터",
+      "사원명부_대시보드반영.xlsx",
+      "사원명부",
     );
   }
 
@@ -193,16 +232,21 @@ export function HrDashboardView() {
     switch (id) {
       case "hr_kpi":
         return (
-          <div className="grid grid-cols-2 gap-3 @sm/app:grid-cols-3 @xl/app:grid-cols-7">
+          <div className="grid grid-cols-2 gap-3 @sm/app:grid-cols-3 @xl/app:grid-cols-4">
             <KpiCard
               label="재직 인원"
               value={`${metrics.headcount}`}
-              hint="현재 필터 기준"
+              hint="사원명부 · 현재 필터"
+            />
+            <KpiCard
+              label="당해년도 입사자수"
+              value={`${hiresThisYear}`}
+              hint={`${new Date().getFullYear()}년 · 입퇴사자 현황`}
             />
             <KpiCard
               label="당해년도 퇴사자수"
               value={`${metrics.leaversYtd}`}
-              hint={`${new Date().getFullYear()}년`}
+              hint={`${new Date().getFullYear()}년 · 입퇴사자 현황`}
             />
             <KpiCard
               label="퇴사율"
@@ -210,19 +254,41 @@ export function HrDashboardView() {
               hint="퇴사 ÷ (재직+퇴사)"
             />
             <KpiCard
-              label="평균 연령"
-              value={`${Math.round(metrics.avgAge)}`}
-              hint="세"
+              label="평균 근속년수"
+              value={
+                metrics.hasTenureData
+                  ? formatYears(metrics.avgTenure).replace("년", "")
+                  : "—"
+              }
+              hint={
+                metrics.hasTenureData
+                  ? "년 · 입사일 기준"
+                  : "입사일 있는 인원만"
+              }
             />
             <KpiCard
-              label="평균 근속년수"
-              value={formatYears(metrics.avgTenure).replace("년", "")}
-              hint="년"
+              label="평균 연령"
+              value={
+                metrics.hasAgeData ? `${Math.round(metrics.avgAge)}` : "—"
+              }
+              hint={
+                metrics.hasAgeData
+                  ? "세"
+                  : "사원명부에 생년월일 없음"
+              }
             />
             <KpiCard
               label="평균 연봉"
-              value={formatManwon(metrics.avgSalary)}
-              hint={`중앙값 ${formatManwon(metrics.medianSalary)}`}
+              value={
+                metrics.hasSalaryData
+                  ? formatManwon(metrics.avgSalary)
+                  : "—"
+              }
+              hint={
+                metrics.hasSalaryData
+                  ? `중앙값 ${formatManwon(metrics.medianSalary)}`
+                  : "사원명부에 연봉 없음"
+              }
             />
             <KpiCard
               label="성별 구성"
@@ -233,10 +299,7 @@ export function HrDashboardView() {
         );
       case "hr_demographics":
         return (
-          <HrAttritionDonutPanel
-            employees={employees.items}
-            filter={filter}
-          />
+          <HrAttritionDonutPanel employees={hrEmployees} filter={filter} />
         );
       case "hr_compensation":
         return (
@@ -277,6 +340,11 @@ export function HrDashboardView() {
                 tone="violet"
               />
             </div>
+            <HrOpsTrendChart
+              laborRows={labor.items}
+              hoursRows={workHours.items}
+              yearMonth={metricMonth}
+            />
           </div>
         );
       case "hr_org":
@@ -285,16 +353,17 @@ export function HrDashboardView() {
             <HrPeriodCompareBlock
               topic="인건비"
               unit="million"
-              unitLabel="금액: 백만원"
+              unitLabel="금액: 백만원 · 팀 클릭 시 파트"
               rows={labor.items}
               asOf={metricAsOf}
             />
             <HrPeriodCompareBlock
               topic="근무시간"
               unit="hours"
-              unitLabel="단위: 시간"
+              unitLabel="단위: 시간 · 곡물·기술 · 파트·연장/야간/휴일 펼침"
               rows={workHours.items}
               asOf={metricAsOf}
+              teams={WORK_HOURS_TEAMS}
             />
             <div className="rounded-xl border border-dashed border-border bg-muted/20 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -303,8 +372,8 @@ export function HrDashboardView() {
                     인건비 · 근무시간 데이터 관리
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    연월(YYYY-MM)·팀·계획·실적을 엑셀로 올리거나 수정·저장하면,
-                    위 기준 연월을 바꿀 때마다 해당 달 숫자가 바뀝니다.
+                    인건비는 팀·파트 금액, 근무시간은 연장·야간·휴일·휴일연장으로
+                    입력합니다. (곡물·기술팀) 붙여넣기 가능.
                   </p>
                 </div>
                 <Button
@@ -319,18 +388,20 @@ export function HrDashboardView() {
               {showMetricEditors ? (
                 <div className="mt-3 space-y-4">
                   <TeamPeriodMetricsEditor
-                    title="팀별 인건비 (계획·실적)"
+                    title="팀·파트 인건비 (계획·실적)"
                     list={labor}
-                    excelFileName="팀인건비.xlsx"
+                    excelFileName="팀파트인건비.xlsx"
                     valueKind="won"
                     focusMonth={metricMonth}
                   />
                   <TeamPeriodMetricsEditor
-                    title="팀별 근무시간 (계획·실적)"
+                    title="팀·파트 근무시간 (연장·야간·휴일·휴일연장)"
+                    description="곡물사업팀·기술팀만 입력합니다. 파트별로 연장/야간/휴일/휴일연장 계획·실적을 넣으면 합계가 자동 계산됩니다."
                     list={workHours}
-                    excelFileName="팀근무시간.xlsx"
+                    excelFileName="팀파트근무시간.xlsx"
                     valueKind="hours"
                     focusMonth={metricMonth}
+                    allowedTeams={WORK_HOURS_TEAMS}
                   />
                 </div>
               ) : null}
@@ -343,7 +414,8 @@ export function HrDashboardView() {
   }
 
   if (
-    !employees.hydrated ||
+    !roster.hydrated ||
+    !staffMovements.hydrated ||
     !layoutHydrated ||
     !labor.hydrated ||
     !workHours.hydrated
@@ -355,7 +427,6 @@ export function HrDashboardView() {
     );
   }
 
-  // 화면 고정 순서 (설정 표시 on/off만 반영)
   const HR_VIEW_ORDER: HomeWidgetId[] = [
     "hr_kpi",
     "hr_demographics",
@@ -379,41 +450,49 @@ export function HrDashboardView() {
             인사자료 대시보드
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            KPI는 인사마스터 엑셀, 인건비·근무시간은 아래 데이터 관리에서
-            연월별로 저장합니다. (현재 브라우저 저장 · 추후 DB 연동 가능)
+            재직·성별·근속은{" "}
+            <Link
+              href="/employees"
+              className="font-medium text-dh-real underline-offset-2 hover:underline"
+            >
+              사원명부
+            </Link>
+            , 입·퇴사는{" "}
+            <Link
+              href="/hr-records?main=hr&sub=staff-movements"
+              className="font-medium text-dh-real underline-offset-2 hover:underline"
+            >
+              입퇴사자 현황
+            </Link>
+            을 반영합니다.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            className="hidden"
-            onChange={(e) => {
-              void onUpload(e.target.files?.[0]);
-              e.target.value = "";
-            }}
-          />
+          <Link
+            href="/employees"
+            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm font-medium hover:bg-muted"
+          >
+            사원명부 열기
+          </Link>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => fileRef.current?.click()}
+            onClick={exportRosterSnapshot}
           >
-            <Upload className="size-3.5" />
-            엑셀 업로드
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={exportTemplate}>
             <Download className="size-3.5" />
-            내보내기
+            명부 내보내기
           </Button>
           <Button
             type="button"
             variant="ghost"
             size="sm"
             onClick={() => {
-              if (window.confirm("샘플 인사마스터로 초기화할까요?")) {
-                employees.reset();
+              if (
+                window.confirm(
+                  "인건비·근무시간 샘플만 초기화할까요? (사원명부는 그대로입니다)",
+                )
+              ) {
                 labor.reset();
                 workHours.reset();
               }
@@ -443,7 +522,7 @@ export function HrDashboardView() {
             }
           >
             <option value="전체">전체</option>
-            {JOB_TRACKS.map((t) => (
+            {filterOpts.jobTracks.map((t) => (
               <option key={t} value={t}>
                 {t}
               </option>
@@ -457,20 +536,27 @@ export function HrDashboardView() {
             value={filter.division}
             onChange={(e) => {
               const division = e.target.value as HrFilter["division"];
+              const teamsForDiv =
+                TEAMS_BY_DIVISION[division as OrgDivision] ?? [];
               setFilter((f) => ({
                 ...f,
                 division,
                 team:
                   division !== "전체" &&
                   f.team !== "전체" &&
-                  !TEAMS_BY_DIVISION[division].includes(f.team as OrgTeam)
+                  teamsForDiv.length > 0 &&
+                  !teamsForDiv.includes(f.team as OrgTeam) &&
+                  !roster.items.some(
+                    (r) =>
+                      r.department === f.team && r.division === division,
+                  )
                     ? "전체"
                     : f.team,
               }));
             }}
           >
             <option value="전체">전사</option>
-            {ORG_DIVISIONS.map((d) => (
+            {filterOpts.divisions.map((d) => (
               <option key={d} value={d}>
                 {d}
               </option>
@@ -507,7 +593,7 @@ export function HrDashboardView() {
           초기화
         </Button>
         <p className="ml-auto text-xs text-muted-foreground">
-          마스터 {employees.items.length}명 · 표시 재직 {metrics.headcount}명
+          사원명부 {roster.items.length}명 · 표시 재직 {metrics.headcount}명
         </p>
       </div>
 

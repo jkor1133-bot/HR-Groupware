@@ -7,9 +7,12 @@ import type {
 } from "@/lib/types";
 
 export type HrFilter = {
-  jobTrack: JobTrack | "전체";
-  division: OrgDivision | "전체";
-  team: OrgTeam | "전체";
+  /** "전체" 또는 사원명부/마스터 직군 값 */
+  jobTrack: string;
+  /** "전체" 또는 상위부서/본부 값 */
+  division: string;
+  /** "전체" 또는 부서/팀 값 */
+  team: string;
 };
 
 export function emptyHrFilter(): HrFilter {
@@ -35,17 +38,25 @@ export function filterActiveEmployees(list: HrEmployee[], f: HrFilter) {
   return list.filter((e) => e.status === "재직" && matchOrg(e, f));
 }
 
-function ageYears(birthDate: string, asOf = new Date()) {
-  const b = new Date(`${birthDate}T00:00:00`);
+function ageYears(birthDate: string, asOf = new Date()): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}/.test(birthDate?.trim() ?? "")) return null;
+  const b = new Date(`${birthDate.trim().slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(b.getTime())) return null;
   let age = asOf.getFullYear() - b.getFullYear();
   const m = asOf.getMonth() - b.getMonth();
   if (m < 0 || (m === 0 && asOf.getDate() < b.getDate())) age -= 1;
-  return Math.max(0, age);
+  if (age < 0 || age > 120) return null;
+  return age;
 }
 
-function tenureYears(hireDate: string, end = new Date()) {
-  const h = new Date(`${hireDate}T00:00:00`);
-  return Math.max(0, (end.getTime() - h.getTime()) / (365.25 * 24 * 3600 * 1000));
+function tenureYears(hireDate: string, end = new Date()): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}/.test(hireDate?.trim() ?? "")) return null;
+  const h = new Date(`${hireDate.trim().slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(h.getTime())) return null;
+  const years =
+    (end.getTime() - h.getTime()) / (365.25 * 24 * 3600 * 1000);
+  if (!Number.isFinite(years) || years < 0) return null;
+  return years;
 }
 
 function avg(nums: number[]) {
@@ -77,6 +88,12 @@ export type HrMetrics = {
   avgTenure: number;
   avgSalary: number;
   medianSalary: number;
+  /** 사원명부 등 생년월일 없을 때 false */
+  hasAgeData: boolean;
+  /** 입사일 있는 인원 기준 근속 */
+  hasTenureData: boolean;
+  /** 연봉 0만 있으면 false */
+  hasSalaryData: boolean;
   gender: { male: number; female: number; malePct: number; femalePct: number };
   byTeam: { label: string; value: number }[];
   byDivision: { label: string; value: number }[];
@@ -118,10 +135,17 @@ export function computeHrMetrics(
   const denom = Math.max(1, active.length + leaversYtd);
   const turnoverRate = Math.round((leaversYtd / denom) * 1000) / 10;
 
-  const salaries = active.map((e) => e.salary);
+  const salaries = active.map((e) => e.salary).filter((s) => s > 0);
   const male = active.filter((e) => e.gender === "남").length;
   const female = active.filter((e) => e.gender === "여").length;
   const totalG = male + female || 1;
+
+  const ages = active
+    .map((e) => ageYears(e.birthDate, asOf))
+    .filter((a): a is number => a != null);
+  const tenures = active
+    .map((e) => tenureYears(e.hireDate, asOf))
+    .filter((t): t is number => t != null);
 
   const ageBands = ["~29", "30~39", "40~49", "50~"] as const;
   const tenureBands = ["~3년", "3~7년", "7~15년", "15년~"] as const;
@@ -145,13 +169,15 @@ export function computeHrMetrics(
     tenureBands.map((b) => [b, 0]),
   );
   for (const e of active) {
-    byAgeMap[ageBandOf(ageYears(e.birthDate, asOf))] += 1;
-    byTenureMap[tenureBandOf(tenureYears(e.hireDate, asOf))] += 1;
+    const age = ageYears(e.birthDate, asOf);
+    if (age != null) byAgeMap[ageBandOf(age)] += 1;
+    const ten = tenureYears(e.hireDate, asOf);
+    if (ten != null) byTenureMap[tenureBandOf(ten)] += 1;
   }
 
   const salaryByTrack: Record<string, number[]> = {};
   for (const e of active) {
-    (salaryByTrack[e.jobTrack] ??= []).push(e.salary);
+    if (e.salary > 0) (salaryByTrack[e.jobTrack] ??= []).push(e.salary);
   }
 
   const salarySlabs = ["~4천만", "4~6천만", "6~8천만", "8천만~"] as const;
@@ -185,13 +211,17 @@ export function computeHrMetrics(
     const end = e.leaveDate
       ? new Date(`${e.leaveDate}T00:00:00`)
       : asOf;
-    leaverAgeMap[ageBandOf(ageYears(e.birthDate, end))] += 1;
-    leaverSalaryMap[salarySlabOf(e.salary)] += 1;
-    const ty = Math.min(15, Math.floor(tenureYears(e.hireDate, end)));
-    tenureYearMap[String(ty)] += 1;
+    const age = ageYears(e.birthDate, end);
+    if (age != null) leaverAgeMap[ageBandOf(age)] += 1;
+    if (e.salary > 0) leaverSalaryMap[salarySlabOf(e.salary)] += 1;
+    const ten = tenureYears(e.hireDate, end);
+    if (ten != null) {
+      const ty = Math.min(15, Math.floor(ten));
+      tenureYearMap[String(ty)] += 1;
+    }
   }
   for (const e of active) {
-    activeSalaryMap[salarySlabOf(e.salary)] += 1;
+    if (e.salary > 0) activeSalaryMap[salarySlabOf(e.salary)] += 1;
   }
 
   return {
@@ -199,10 +229,13 @@ export function computeHrMetrics(
     leaversYtd,
     hiresYtd,
     turnoverRate,
-    avgAge: avg(active.map((e) => ageYears(e.birthDate, asOf))),
-    avgTenure: avg(active.map((e) => tenureYears(e.hireDate, asOf))),
+    avgAge: avg(ages),
+    avgTenure: avg(tenures),
     avgSalary: avg(salaries),
     medianSalary: median(salaries),
+    hasAgeData: ages.length > 0,
+    hasTenureData: tenures.length > 0,
+    hasSalaryData: salaries.length > 0,
     gender: {
       male,
       female,

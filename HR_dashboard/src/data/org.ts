@@ -71,3 +71,43 @@ export const TEAMS_BY_DIVISION: Record<OrgDivision, OrgTeam[]> = {
   국제물류사업본부: ["곡물사업팀", "기술팀", "SCM사업팀"],
   축산자원사업본부: ["구매팀", "영업팀", "물류지원팀"],
 };
+
+/** 팀에 속한 파트·사업소 (인건비·근무시간 세부) */
+export const PARTS_BY_TEAM: Partial<Record<OrgTeam, readonly string[]>> = {
+  곡물사업팀: ["하역파트", "곡물관리파트", "계근파트"],
+  SCM사업팀: ["남항사업소", "광주물류센터"],
+  기술팀: ["기계파트", "전기파트", "안전파트"],
+  영업팀: [
+    "경인영업소",
+    "안성영업소",
+    "사천영업소",
+    "안동영업소",
+    "정읍영업소",
+  ],
+};
+
+/** 근무시간 집계·표시 대상 팀 */
+export const WORK_HOURS_TEAMS: OrgTeam[] = ["곡물사업팀", "기술팀"];
+
+export function partsForTeam(team: OrgTeam | string): string[] {
+  const list = PARTS_BY_TEAM[team as OrgTeam];
+  return list ? [...list] : [];
+}
+
+/** 근무시간 세부 구분 */
+export const WORK_HOUR_DETAIL_KEYS = [
+  "overtime",
+  "night",
+  "holiday",
+  "holidayOt",
+] as const;
+
+export const WORK_HOUR_DETAIL_LABELS: Record<
+  (typeof WORK_HOUR_DETAIL_KEYS)[number],
+  string
+> = {
+  overtime: "연장시간",
+  night: "야간시간",
+  holiday: "휴일시간",
+  holidayOt: "휴일연장시간",
+};

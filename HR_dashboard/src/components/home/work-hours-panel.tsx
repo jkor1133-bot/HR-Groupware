@@ -19,7 +19,7 @@ const TRACKS: Array<WorkHoursRow["jobTrack"]> = ["현장직", "별정직"];
 
 export function WorkHoursPanel() {
   const { hydrated, items, replaceAll } = useLocalList(
-    "hr-dashboard-workhours-v2",
+    "hr-dashboard-workhours-v3",
     seedWorkHours,
   );
   const [selected, setSelected] =

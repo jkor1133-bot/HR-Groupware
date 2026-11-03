@@ -23,7 +23,7 @@ const TRACKS: JobTrack[] = ["일반직", "지원직", "현장직", "별정직"];
 
 export function LaborCostPanel() {
   const { hydrated, items, replaceAll } = useLocalList(
-    "hr-dashboard-labor-v2",
+    "hr-dashboard-labor-v3",
     seedLaborCosts,
   );
   const [selected, setSelected] = useState<JobTrack[]>([...TRACKS]);

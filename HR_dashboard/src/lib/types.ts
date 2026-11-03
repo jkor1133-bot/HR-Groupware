@@ -274,6 +274,29 @@ export type EmployeeRosterRecord = {
   hireDate: string;
 };
 
+/** 인사 · 입퇴사자 현황 */
+export type StaffMovementKind = "hire" | "leave";
+
+export type StaffMovementRecord = {
+  id: string;
+  kind: StaffMovementKind;
+  name: string;
+  empNo: string;
+  division: string;
+  department: string;
+  jobTrack: string;
+  title: string;
+  gender: string;
+  /** 입사일 또는 퇴사일 */
+  eventDate: string;
+  /** 퇴사 시 입사일(근속·분석용) */
+  hireDate?: string;
+  leaveReason?: LeaveReason | string;
+  note: string;
+  /** 사원명부 id (연동 시) */
+  rosterId?: string;
+};
+
 /** 인사총무 이력 · 승진 발령 */
 export type PromotionRecord = {
   id: string;
@@ -383,13 +406,31 @@ export type WorkHoursRow = {
   hours: number;
 };
 
+/** 근무시간 세부 항목 */
+export type WorkHourDetailKey =
+  | "overtime"
+  | "night"
+  | "holiday"
+  | "holidayOt";
+
+export type WorkHourDetailSlice = {
+  plan: number;
+  actual: number;
+};
+
+export type WorkHourDetails = Record<WorkHourDetailKey, WorkHourDetailSlice>;
+
 /** 팀별 월간 계획·실적 (인건비=원, 근무시간=시간) */
 export type TeamPeriodMetric = {
   id: string;
   yearMonth: string;
   team: OrgTeam;
+  /** 파트·사업소 (없으면 팀 단위) */
+  part?: string;
   plan: number;
   actual: number;
+  /** 근무시간 세부(연장·야간·휴일·휴일연장). 인건비는 미사용 */
+  hourDetails?: WorkHourDetails;
 };
 
 export type RaciActivity = {

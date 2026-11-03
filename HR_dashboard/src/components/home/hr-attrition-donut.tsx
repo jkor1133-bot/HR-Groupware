@@ -115,6 +115,61 @@ function periodHint(period: AttritionPeriod, yearMonth: string) {
   return `누계(${y}년 1~${m}월)`;
 }
 
+const RADIAN = Math.PI / 180;
+
+/** 도넛 조각 안쪽 중앙에 카테고리명 표시 */
+function DonutSliceLabel(props: {
+  cx?: number;
+  cy?: number;
+  midAngle?: number;
+  innerRadius?: number;
+  outerRadius?: number;
+  percent?: number;
+  name?: string;
+  payload?: { label?: string; value?: number };
+}) {
+  const {
+    cx = 0,
+    cy = 0,
+    midAngle = 0,
+    innerRadius = 0,
+    outerRadius = 0,
+    percent = 0,
+    name,
+    payload,
+  } = props;
+  // 너무 작은 조각은 겹치므로 생략
+  if (percent < 0.08) return null;
+  const label = String(payload?.label ?? name ?? "");
+  if (!label) return null;
+
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.55;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  const short =
+    label.length > 6 ? `${label.slice(0, 5)}…` : label;
+
+  return (
+    <text
+      x={x}
+      y={y}
+      fill="#fff"
+      textAnchor="middle"
+      dominantBaseline="central"
+      className="pointer-events-none select-none"
+      style={{
+        fontSize: percent >= 0.2 ? 11 : 10,
+        fontWeight: 600,
+        paintOrder: "stroke",
+        stroke: "rgba(15, 40, 70, 0.35)",
+        strokeWidth: 2,
+      }}
+    >
+      {short}
+    </text>
+  );
+}
+
 function InteractiveDonutCard({
   title,
   subtitle,
@@ -209,9 +264,11 @@ function InteractiveDonutCard({
                   nameKey="label"
                   cx="45%"
                   cy="50%"
-                  innerRadius="46%"
-                  outerRadius="70%"
+                  innerRadius="42%"
+                  outerRadius="72%"
                   paddingAngle={2}
+                  label={DonutSliceLabel}
+                  labelLine={false}
                   onClick={(data) => {
                     const payload = data as {
                       name?: string;
