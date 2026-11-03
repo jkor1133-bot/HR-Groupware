@@ -29,6 +29,7 @@ function sanitizeEmployee(
     id: rest.id,
     division: rest.division ?? "",
     department: rest.department ?? "",
+    part: String(asRec.part ?? asRec["파트"] ?? rest.part ?? ""),
     empNo: rest.empNo ?? "",
     name: rest.name ?? "",
     title: rest.title ?? "",
@@ -54,6 +55,7 @@ function loadEmployees(): EmployeeRosterRecord[] {
       const rec = e as EmployeeRosterRecord & { birthDate?: string };
       return (
         "birthDate" in rec ||
+        typeof rec.part !== "string" ||
         typeof rec.titleYears !== "number" ||
         !Number.isFinite(rec.titleYears)
       );

@@ -66,6 +66,43 @@ export function cellNum(row: Record<string, unknown>, ...keys: string[]) {
 }
 
 /**
+ * 엑셀에서 복사한 표(탭/쉼표 구분) → 행 객체 배열.
+ * 첫 줄을 헤더로 사용합니다.
+ */
+export function parsePastedTable(text: string): Record<string, unknown>[] {
+  const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  if (!normalized) return [];
+
+  const lines = normalized.split("\n").filter((line) => line.trim() !== "");
+  if (lines.length < 2) return [];
+
+  const first = lines[0];
+  const delim =
+    first.includes("\t") ? "\t" : first.includes(",") ? "," : "\t";
+
+  function splitLine(line: string): string[] {
+    if (delim === "\t") return line.split("\t").map((c) => c.trim());
+    // 간단 CSV: 따옴표 안 쉼표 무시하지 않음(사원명부 헤더는 단순)
+    return line.split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
+  }
+
+  const headers = splitLine(first).map((h) => h.trim()).filter(Boolean);
+  if (!headers.length) return [];
+
+  const out: Record<string, unknown>[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cells = splitLine(lines[i]);
+    if (cells.every((c) => !c)) continue;
+    const row: Record<string, unknown> = {};
+    headers.forEach((h, idx) => {
+      row[h] = cells[idx] ?? "";
+    });
+    out.push(row);
+  }
+  return out;
+}
+
+/**
  * 직위년차 전용 파싱.
  * 엑셀에서 날짜로 잘못 읽힌 값·빈 칸·"년차" 헤더 변형을 처리합니다.
  */

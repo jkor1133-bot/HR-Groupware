@@ -13,8 +13,10 @@ export const PROMOTION_TITLES = [
 export type PromotionTitle = (typeof PROMOTION_TITLES)[number];
 
 export const PROMOTION_ROLES = [
+  "대표이사",
   "팀원",
   "팀장",
+  "소장",
   "본부장",
   "기타",
 ] as const;

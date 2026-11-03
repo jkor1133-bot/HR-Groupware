@@ -252,6 +252,8 @@ export type EmployeeRosterRecord = {
   division: string;
   /** 부서 */
   department: string;
+  /** 파트 (부서 세부) */
+  part: string;
   /** 사번 */
   empNo: string;
   /** 성명 */

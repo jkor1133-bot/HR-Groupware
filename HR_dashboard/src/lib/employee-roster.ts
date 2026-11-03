@@ -37,7 +37,30 @@ export const EMPLOYEE_TITLES = [
   "사원",
 ] as const;
 
-export const EMPLOYEE_JOB_ROLES = ["본부장", "팀장", "팀원"] as const;
+export const EMPLOYEE_JOB_ROLES = [
+  "대표이사",
+  "본부장",
+  "팀장",
+  "소장",
+  "팀원",
+] as const;
+
+/** 부서 세부 파트 (선택) */
+export const EMPLOYEE_PARTS = [
+  "하역파트",
+  "곡물관리파트",
+  "기계파트",
+  "전기파트",
+  "계근파트",
+  "안전파트",
+  "경인영업소",
+  "안성영업소",
+  "사천영업소",
+  "정읍영업소",
+  "안동영업소",
+  "남항사업소",
+  "광주물류센터",
+] as const;
 
 export const EMPLOYEE_JOB_TRACKS = [
   "임원",

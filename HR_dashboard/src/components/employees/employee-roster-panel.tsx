@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ChevronDown,
+  ClipboardPaste,
   Download,
   Pencil,
   Plus,
@@ -10,15 +12,19 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useEmployees } from "@/hooks/use-employees";
 import {
+  EMPLOYEE_DEPARTMENTS,
   EMPLOYEE_DIVISIONS,
   EMPLOYEE_GENDERS,
   EMPLOYEE_JOB_ROLES,
   EMPLOYEE_JOB_TRACKS,
+  EMPLOYEE_PARTS,
   EMPLOYEE_TITLES,
   departmentsForDivision,
 } from "@/lib/employee-roster";
@@ -27,6 +33,7 @@ import {
   cellStr,
   cellTitleYears,
   downloadRowsAsExcel,
+  parsePastedTable,
   readExcelFile,
 } from "@/lib/excel";
 import type { EmployeeRosterRecord } from "@/lib/types";
@@ -34,6 +41,7 @@ import type { EmployeeRosterRecord } from "@/lib/types";
 type FormState = {
   division: string;
   department: string;
+  part: string;
   empNo: string;
   name: string;
   title: string;
@@ -45,10 +53,30 @@ type FormState = {
   hireDate: string;
 };
 
+type FilterKey =
+  | "division"
+  | "department"
+  | "title"
+  | "jobRole"
+  | "jobTrack"
+  | "gender";
+
+type FiltersState = Record<FilterKey, string[]>;
+
+const EMPTY_FILTERS: FiltersState = {
+  division: [],
+  department: [],
+  title: [],
+  jobRole: [],
+  jobTrack: [],
+  gender: [],
+};
+
 function emptyForm(): FormState {
   return {
     division: EMPLOYEE_DIVISIONS[1],
     department: departmentsForDivision(EMPLOYEE_DIVISIONS[1])[0] ?? "",
+    part: "",
     empNo: "",
     name: "",
     title: "사원",
@@ -70,6 +98,7 @@ function toRecord(form: FormState, id: string): EmployeeRosterRecord {
     id,
     division: form.division,
     department: form.department,
+    part: form.part.trim(),
     empNo: form.empNo.trim(),
     name: form.name.trim(),
     title: form.title,
@@ -89,6 +118,7 @@ const selectClass =
 const EMPLOYEE_EXCEL_HEADERS = [
   "상위부서",
   "부서",
+  "파트",
   "사번",
   "성명",
   "직위",
@@ -101,8 +131,9 @@ const EMPLOYEE_EXCEL_HEADERS = [
 ] as const;
 
 const EMPLOYEE_EXCEL_SAMPLE: Record<string, string | number> = {
-  상위부서: "경영지원본부",
-  부서: "인사총무팀",
+  상위부서: "국제물류사업본부",
+  부서: "곡물사업팀",
+  파트: "곡물관리파트",
   사번: "20260001",
   성명: "홍길동",
   직위: "대리",
@@ -114,6 +145,102 @@ const EMPLOYEE_EXCEL_SAMPLE: Record<string, string | number> = {
   입사일자: "2020-03-02",
 };
 
+const FILTERABLE: {
+  key: FilterKey;
+  label: string;
+  options: readonly string[];
+}[] = [
+  { key: "division", label: "상위부서", options: EMPLOYEE_DIVISIONS },
+  { key: "department", label: "부서", options: EMPLOYEE_DEPARTMENTS },
+  { key: "title", label: "직위", options: EMPLOYEE_TITLES },
+  { key: "jobRole", label: "직책", options: EMPLOYEE_JOB_ROLES },
+  { key: "jobTrack", label: "직군", options: EMPLOYEE_JOB_TRACKS },
+  { key: "gender", label: "성별", options: EMPLOYEE_GENDERS },
+];
+
+function ColumnFilter({
+  label,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  options: readonly string[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const active = selected.length > 0;
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  function toggle(value: string) {
+    if (selected.includes(value)) {
+      onChange(selected.filter((v) => v !== value));
+    } else {
+      onChange([...selected, value]);
+    }
+  }
+
+  return (
+    <div ref={rootRef} className="relative inline-block text-left">
+      <button
+        type="button"
+        className={cn(
+          "inline-flex items-center gap-1 px-1 font-semibold hover:underline",
+          active && "text-amber-200",
+        )}
+        onClick={() => setOpen((v) => !v)}
+        title={`${label} 필터 (여러 개 선택 가능)`}
+      >
+        {label}
+        {active ? (
+          <span className="rounded bg-white/20 px-1 text-[10px] font-medium">
+            {selected.length}
+          </span>
+        ) : null}
+        <ChevronDown className="size-3.5 opacity-80" />
+      </button>
+      {open ? (
+        <div className="absolute left-0 top-full z-30 mt-1 max-h-56 min-w-[9.5rem] overflow-y-auto rounded-md border border-border bg-card p-1.5 text-foreground shadow-lg">
+          <div className="mb-1 flex items-center justify-between gap-2 border-b border-border px-1 pb-1">
+            <span className="text-[11px] text-muted-foreground">다중 선택</span>
+            <button
+              type="button"
+              className="text-[11px] text-dh-real hover:underline"
+              onClick={() => onChange([])}
+            >
+              전체
+            </button>
+          </div>
+          {options.map((opt) => (
+            <label
+              key={opt}
+              className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-muted"
+            >
+              <input
+                type="checkbox"
+                className="size-3.5 accent-dh-real"
+                checked={selected.includes(opt)}
+                onChange={() => toggle(opt)}
+              />
+              <span>{opt}</span>
+            </label>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function EmployeeRosterPanel() {
   const list = useEmployees();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -121,6 +248,9 @@ export function EmployeeRosterPanel() {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<EmployeeRosterRecord[] | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [filters, setFilters] = useState<FiltersState>(EMPTY_FILTERS);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
 
   useEffect(() => {
     if (!editing) setDraft(null);
@@ -131,6 +261,47 @@ export function EmployeeRosterPanel() {
     () => departmentsForDivision(form.division),
     [form.division],
   );
+
+  const filterOptions = useMemo(() => {
+    const extras: FiltersState = {
+      division: [],
+      department: [],
+      title: [],
+      jobRole: [],
+      jobTrack: [],
+      gender: [],
+    };
+    for (const row of working) {
+      for (const { key, options } of FILTERABLE) {
+        const v = String(row[key] ?? "").trim();
+        if (v && !(options as readonly string[]).includes(v) && !extras[key].includes(v)) {
+          extras[key].push(v);
+        }
+      }
+    }
+    return Object.fromEntries(
+      FILTERABLE.map(({ key, options }) => [
+        key,
+        [...options, ...extras[key].sort((a, b) => a.localeCompare(b, "ko"))],
+      ]),
+    ) as Record<FilterKey, string[]>;
+  }, [working]);
+
+  const displayed = useMemo(() => {
+    return working.filter((row) =>
+      FILTERABLE.every(({ key }) => {
+        const selected = filters[key];
+        if (!selected.length) return true;
+        return selected.includes(String(row[key] ?? ""));
+      }),
+    );
+  }, [working, filters]);
+
+  const hasActiveFilters = FILTERABLE.some(({ key }) => filters[key].length > 0);
+
+  function setFilter(key: FilterKey, next: string[]) {
+    setFilters((prev) => ({ ...prev, [key]: next }));
+  }
 
   function startEdit() {
     setDraft(cloneItems(list.items));
@@ -204,10 +375,11 @@ export function EmployeeRosterPanel() {
     );
   }
 
-  async function upload(file?: File) {
-    if (!file) return;
-    const rows = await readExcelFile(file);
-    const next: EmployeeRosterRecord[] = rows
+  function mapRowsToEmployees(
+    rows: Record<string, unknown>[],
+    idPrefix: string,
+  ): EmployeeRosterRecord[] {
+    return rows
       .map((row, i) => {
         const division =
           cellStr(row, "상위부서", "본부", "division") ||
@@ -218,9 +390,10 @@ export function EmployeeRosterPanel() {
           depts[0] ||
           "";
         return {
-          id: `emp-up-${Date.now()}-${i}`,
+          id: `${idPrefix}-${Date.now()}-${i}`,
           division,
           department,
+          part: cellStr(row, "파트", "part", "세부파트"),
           empNo: cellStr(row, "사번", "empNo", "사원번호"),
           name: cellStr(row, "성명", "이름", "name"),
           title: cellStr(row, "직위", "title") || "사원",
@@ -238,22 +411,77 @@ export function EmployeeRosterPanel() {
         } satisfies EmployeeRosterRecord;
       })
       .filter((r) => r.name && r.empNo);
+  }
+
+  function applyImported(next: EmployeeRosterRecord[], mode: "replace" | "append") {
     if (!next.length) {
-      window.alert("가져올 유효한 행이 없습니다. (사번·성명 필수)");
-      return;
+      window.alert("가져올 유효한 행이 없습니다. (사번·성명 필수 · 첫 줄은 헤더)");
+      return false;
     }
-    if (editing) {
+    if (mode === "append") {
+      if (editing) {
+        setDraft((prev) => [...(prev ?? cloneItems(list.items)), ...next]);
+      } else {
+        list.replaceAll([...list.items, ...next]);
+      }
+    } else if (editing) {
       setDraft(next);
     } else {
       list.replaceAll(next);
+    }
+    return true;
+  }
+
+  async function upload(file?: File) {
+    if (!file) return;
+    const rows = await readExcelFile(file);
+    applyImported(mapRowsToEmployees(rows, "emp-up"), "replace");
+  }
+
+  function applyPaste(mode: "replace" | "append") {
+    const rows = parsePastedTable(pasteText);
+    if (!rows.length) {
+      window.alert(
+        "붙여넣은 내용이 비어 있거나 형식이 맞지 않습니다.\n엑셀에서 헤더 포함 범위를 복사한 뒤 붙여넣으세요.",
+      );
+      return;
+    }
+    const next = mapRowsToEmployees(rows, "emp-paste");
+    const ok = applyImported(next, mode);
+    if (ok) {
+      setPasteText("");
+      setPasteOpen(false);
+      window.alert(
+        mode === "append"
+          ? `${next.length}명을 기존 목록에 추가했습니다.`
+          : `${next.length}명으로 목록을 교체했습니다.`,
+      );
+    }
+  }
+
+  async function pasteFromClipboard() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text.trim()) {
+        window.alert("클립보드가 비어 있습니다. 엑셀에서 먼저 복사하세요.");
+        return;
+      }
+      setPasteText(text);
+      setPasteOpen(true);
+    } catch {
+      setPasteOpen(true);
+      window.alert(
+        "클립보드 읽기가 차단되었습니다. 아래 칸에 Ctrl+V로 직접 붙여넣으세요.",
+      );
     }
   }
 
   function exportExcel(asTemplate = false) {
     const headers = [...EMPLOYEE_EXCEL_HEADERS];
-    const dataRows = working.map((e) => ({
+    const dataRows = displayed.map((e) => ({
       상위부서: e.division,
       부서: e.department,
+      파트: e.part,
       사번: e.empNo,
       성명: e.name,
       직위: e.title,
@@ -288,9 +516,21 @@ export function EmployeeRosterPanel() {
             사원명부
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            임직원 기본 정보를 등록합니다. [양식 다운로드]로 헤더·예시가 있는
-            엑셀을 받은 뒤 작성하고 업로드하세요. (생년월일·나이는 수집하지 않습니다)
+            임직원 기본 정보를 등록합니다. 표 헤더(상위부서·부서·직위·직책·직군·성별)는
+            여러 값을 골라 필터할 수 있습니다.
           </p>
+          {hasActiveFilters ? (
+            <p className="mt-1 text-xs font-medium text-dh-real">
+              필터 적용 중 · 표시 {displayed.length}명 / 전체 {working.length}명{" "}
+              <button
+                type="button"
+                className="underline"
+                onClick={() => setFilters(EMPTY_FILTERS)}
+              >
+                필터 초기화
+              </button>
+            </p>
+          ) : null}
           {editing ? (
             <p className="mt-1 text-xs font-medium text-dh-real">
               수정 모드 — 내용을 바꾼 뒤 [저장]을 눌러 주세요.
@@ -328,6 +568,18 @@ export function EmployeeRosterPanel() {
             <Upload data-icon="inline-start" />
             엑셀 업로드
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setPasteOpen(true);
+              void pasteFromClipboard();
+            }}
+            title="엑셀에서 복사한 표를 붙여넣어 등록"
+          >
+            <ClipboardPaste data-icon="inline-start" />
+            붙여넣기 입력
+          </Button>
           <input
             ref={fileRef}
             type="file"
@@ -358,6 +610,60 @@ export function EmployeeRosterPanel() {
         </div>
       </div>
 
+      {pasteOpen ? (
+        <div className="mb-4 rounded-lg border border-border bg-muted/30 p-3 sm:p-4">
+          <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                엑셀 복사 → 붙여넣기
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                엑셀에서 헤더(상위부서, 부서, 파트, 사번, 성명 …) 포함 범위를
+                복사한 뒤 아래에 Ctrl+V 하세요. 파일 업로드가 막혀도 됩니다.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setPasteOpen(false);
+                setPasteText("");
+              }}
+            >
+              <X data-icon="inline-start" />
+              닫기
+            </Button>
+          </div>
+          <Textarea
+            value={pasteText}
+            onChange={(e) => setPasteText(e.target.value)}
+            placeholder={
+              "상위부서\t부서\t파트\t사번\t성명\t직위\t직책\t직군\t성별\t직위년차\t그룹입사일자\t입사일자\n경영지원본부\t인사총무팀\t\t20260001\t홍길동\t대리\t팀원\t일반직\t남자\t1\t2020-03-02\t2020-03-02"
+            }
+            className="min-h-[9rem] font-mono text-xs"
+          />
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => applyPaste("replace")}>
+              붙여넣기로 전체 교체
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => applyPaste("append")}
+            >
+              기존에 추가
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void pasteFromClipboard()}
+            >
+              클립보드에서 다시 읽기
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <div className="grid gap-1">
           <Label>상위부서</Label>
@@ -385,6 +691,21 @@ export function EmployeeRosterPanel() {
             {deptOptions.map((d) => (
               <option key={d} value={d}>
                 {d}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="grid gap-1">
+          <Label>파트</Label>
+          <select
+            className={selectClass}
+            value={form.part}
+            onChange={(e) => setForm((f) => ({ ...f, part: e.target.value }))}
+          >
+            <option value="">선택 안 함</option>
+            {EMPLOYEE_PARTS.map((p) => (
+              <option key={p} value={p}>
+                {p}
               </option>
             ))}
           </select>
@@ -507,17 +828,32 @@ export function EmployeeRosterPanel() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="gw-data-table w-full min-w-[960px] text-sm">
+        <table className="gw-data-table w-full min-w-[1080px] text-sm">
           <thead>
             <tr className="bg-dh-deep text-white">
-              <th className="px-2 py-2">상위부서</th>
-              <th className="px-2 py-2">부서</th>
+              {FILTERABLE.slice(0, 2).map(({ key, label }) => (
+                <th key={key} className="px-1 py-2">
+                  <ColumnFilter
+                    label={label}
+                    options={filterOptions[key]}
+                    selected={filters[key]}
+                    onChange={(next) => setFilter(key, next)}
+                  />
+                </th>
+              ))}
+              <th className="px-2 py-2">파트</th>
               <th className="px-2 py-2">사번</th>
               <th className="px-2 py-2">성명</th>
-              <th className="px-2 py-2">직위</th>
-              <th className="px-2 py-2">직책</th>
-              <th className="px-2 py-2">직군</th>
-              <th className="px-2 py-2">성별</th>
+              {FILTERABLE.slice(2).map(({ key, label }) => (
+                <th key={key} className="px-1 py-2">
+                  <ColumnFilter
+                    label={label}
+                    options={filterOptions[key]}
+                    selected={filters[key]}
+                    onChange={(next) => setFilter(key, next)}
+                  />
+                </th>
+              ))}
               <th className="px-2 py-2">직위년차</th>
               <th className="px-2 py-2">그룹입사</th>
               <th className="px-2 py-2">입사</th>
@@ -528,23 +864,25 @@ export function EmployeeRosterPanel() {
             {!list.hydrated ? (
               <tr>
                 <td
-                  colSpan={12}
+                  colSpan={13}
                   className="px-3 py-8 text-center text-muted-foreground"
                 >
                   불러오는 중…
                 </td>
               </tr>
-            ) : working.length === 0 ? (
+            ) : displayed.length === 0 ? (
               <tr>
                 <td
-                  colSpan={12}
+                  colSpan={13}
                   className="px-3 py-8 text-center text-muted-foreground"
                 >
-                  등록된 사원이 없습니다. 추가하거나 엑셀을 업로드해 주세요.
+                  {working.length === 0
+                    ? "등록된 사원이 없습니다. 추가하거나 엑셀을 업로드해 주세요."
+                    : "선택한 필터에 맞는 사원이 없습니다. 필터를 바꿔 보세요."}
                 </td>
               </tr>
             ) : (
-              working.map((e) => {
+              displayed.map((e) => {
                 const rowDepts = departmentsForDivision(e.division);
                 return (
                   <tr key={e.id} className="border-t border-border">
@@ -587,6 +925,32 @@ export function EmployeeRosterPanel() {
                         </select>
                       ) : (
                         e.department
+                      )}
+                    </td>
+                    <td className="px-1.5 py-1">
+                      {editing ? (
+                        <select
+                          className={selectClass}
+                          value={e.part ?? ""}
+                          onChange={(ev) =>
+                            patchRow(e.id, { part: ev.target.value })
+                          }
+                        >
+                          <option value="">선택 안 함</option>
+                          {EMPLOYEE_PARTS.map((p) => (
+                            <option key={p} value={p}>
+                              {p}
+                            </option>
+                          ))}
+                          {e.part &&
+                          !(EMPLOYEE_PARTS as readonly string[]).includes(
+                            e.part,
+                          ) ? (
+                            <option value={e.part}>{e.part}</option>
+                          ) : null}
+                        </select>
+                      ) : (
+                        e.part || "—"
                       )}
                     </td>
                     <td className="px-1.5 py-1">
