@@ -18,7 +18,23 @@ import {
 } from "@/components/calendar/event-form-dialog";
 import { Button } from "@/components/ui/button";
 import { useCalendar } from "@/hooks/use-calendar";
+import { useLocalList } from "@/hooks/use-local-list";
 import { useWeeklyPlans } from "@/hooks/use-weekly-plans";
+import {
+  contractsToCalendarEvents,
+  isContractCalendarEvent,
+  isOpsDeadlineCalendarEvent,
+  isPermitCalendarEvent,
+  isReadOnlyCalendarEvent,
+  opsDeadlineHref,
+  permitsToCalendarEvents,
+} from "@/lib/ops-calendar";
+import {
+  CONTRACTS_STORAGE_KEY,
+  PERMITS_STORAGE_KEY,
+  loadContracts,
+  loadPermits,
+} from "@/lib/hr-ops-storage";
 import type { CalendarEvent, TeamMember } from "@/lib/types";
 import {
   isWeeklyCalendarEvent,
@@ -37,6 +53,8 @@ function formatSelectedLabel(ymd: string) {
 }
 
 function eventChipLabel(ev: CalendarEvent) {
+  if (isContractCalendarEvent(ev)) return `[계약] ${ev.title}`;
+  if (isPermitCalendarEvent(ev)) return `[인허가] ${ev.title}`;
   if (isWeeklyCalendarEvent(ev)) return `[주간] ${ev.title}`;
   if (ev.allDay) return ev.title;
   return `${ev.startTime} ${ev.title}`;
@@ -72,6 +90,8 @@ const HOURS = Array.from({ length: 24 }, (_, i) => i);
 export function CalendarPageView() {
   const { hydrated, eventsOn, upsert, remove, members } = useCalendar();
   const { hydrated: weeklyHydrated, tasks } = useWeeklyPlans();
+  const contracts = useLocalList(CONTRACTS_STORAGE_KEY, loadContracts);
+  const permits = useLocalList(PERMITS_STORAGE_KEY, loadPermits);
   const [mode, setMode] = useState<ViewMode>("month");
   const [cursor, setCursor] = useState<Date | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -100,7 +120,17 @@ export function CalendarPageView() {
   );
   const weeklyCount = weeklyEvents.length;
 
-  /** 직접 입력 + 주간업무 기한 (Calendar 페이지 전용) */
+  const opsEvents = useMemo(
+    () => [
+      ...contractsToCalendarEvents(contracts.items),
+      ...permitsToCalendarEvents(permits.items),
+    ],
+    [contracts.items, permits.items],
+  );
+  const contractCount = opsEvents.filter(isContractCalendarEvent).length;
+  const permitCount = opsEvents.filter(isPermitCalendarEvent).length;
+
+  /** 직접 입력 + 주간업무 + 계약·인허가 종료일 */
   const itemsOn = useCallback(
     (date: string) => {
       const fromCalendar = eventsOn(date);
@@ -108,14 +138,20 @@ export function CalendarPageView() {
         const end = e.endDate || e.date;
         return e.date <= date && end >= date;
       });
-      return [...fromCalendar, ...fromWeekly].sort((a, b) => {
-        const aw = isWeeklyCalendarEvent(a) ? 1 : 0;
-        const bw = isWeeklyCalendarEvent(b) ? 1 : 0;
-        if (aw !== bw) return aw - bw;
+      const fromOps = opsEvents.filter((e) => e.date === date);
+      return [...fromCalendar, ...fromWeekly, ...fromOps].sort((a, b) => {
+        const rank = (ev: CalendarEvent) => {
+          if (isOpsDeadlineCalendarEvent(ev)) return 0;
+          if (isWeeklyCalendarEvent(ev)) return 2;
+          return 1;
+        };
+        const ra = rank(a);
+        const rb = rank(b);
+        if (ra !== rb) return ra - rb;
         return a.startTime.localeCompare(b.startTime);
       });
     },
-    [eventsOn, weeklyEvents],
+    [eventsOn, weeklyEvents, opsEvents],
   );
 
   const year = cursor?.getFullYear() ?? 2026;
@@ -161,7 +197,7 @@ export function CalendarPageView() {
   }
 
   function openEdit(ev: CalendarEvent) {
-    if (isWeeklyCalendarEvent(ev)) return;
+    if (isReadOnlyCalendarEvent(ev)) return;
     setDetail(null);
     setEditingId(ev.id);
     setEditingCreatedAt(ev.createdAt);
@@ -174,7 +210,14 @@ export function CalendarPageView() {
     setFormOpen(false);
   }
 
-  if (!hydrated || !weeklyHydrated || !cursor || !selected) {
+  if (
+    !hydrated ||
+    !weeklyHydrated ||
+    !contracts.hydrated ||
+    !permits.hydrated ||
+    !cursor ||
+    !selected
+  ) {
     return (
       <div className="flex min-h-[24rem] items-center justify-center rounded-xl border border-border bg-card text-sm text-muted-foreground shadow-sm">
         캘린더를 불러오는 중…
@@ -183,7 +226,9 @@ export function CalendarPageView() {
   }
 
   const dayEvents = itemsOn(selected);
+  const detailIsReadOnly = detail ? isReadOnlyCalendarEvent(detail) : false;
   const detailIsWeekly = detail ? isWeeklyCalendarEvent(detail) : false;
+  const detailIsOps = detail ? isOpsDeadlineCalendarEvent(detail) : false;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -194,8 +239,7 @@ export function CalendarPageView() {
             Calendar
           </h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            직접 입력 일정과 주간업무 기한을 함께 표시합니다. 주간업무는
-            주황으로 구분되며, 홈 캘린더에는 직접 입력만 나갑니다.
+            직접 입력 · 주간업무 기한 · 계약·인허가 종료일을 함께 표시합니다.
           </p>
           <div className="mt-1.5 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
@@ -211,6 +255,20 @@ export function CalendarPageView() {
                 style={{ backgroundColor: "#b45309" }}
               />
               주간업무 기한 ({weeklyCount}건)
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="size-2 rounded-full"
+                style={{ backgroundColor: "#b91c1c" }}
+              />
+              계약 만료·임박 ({contractCount}건)
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="size-2 rounded-full"
+                style={{ backgroundColor: "#d97706" }}
+              />
+              인허가 종료·임박 ({permitCount}건)
             </span>
           </div>
         </div>
@@ -349,12 +407,10 @@ export function CalendarPageView() {
           if (!o) setDetail(null);
         }}
         onEdit={
-          detailIsWeekly
-            ? undefined
-            : () => detail && openEdit(detail)
+          detailIsReadOnly ? undefined : () => detail && openEdit(detail)
         }
         onDelete={
-          detailIsWeekly
+          detailIsReadOnly
             ? undefined
             : () => {
                 if (!detail) return;
@@ -372,6 +428,16 @@ export function CalendarPageView() {
               className="inline-flex h-8 items-center rounded-md border border-border bg-background px-3 text-sm hover:bg-muted"
             >
               주간업무계획에서 확인
+            </Link>
+          ) : detailIsOps && detail ? (
+            <Link
+              href={opsDeadlineHref(detail)}
+              onClick={() => setDetail(null)}
+              className="inline-flex h-8 items-center rounded-md border border-border bg-background px-3 text-sm hover:bg-muted"
+            >
+              {isContractCalendarEvent(detail)
+                ? "계약직 현황에서 확인"
+                : "인허가 현황에서 확인"}
             </Link>
           ) : null
         }
@@ -754,6 +820,14 @@ function DaySummaryBar({
                 {isWeeklyCalendarEvent(ev) ? (
                   <span className="shrink-0 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
                     주간업무
+                  </span>
+                ) : isContractCalendarEvent(ev) ? (
+                  <span className="shrink-0 rounded border border-red-300 bg-[#fceeee] px-1.5 py-0.5 text-[10px] font-medium text-dh-red">
+                    계약
+                  </span>
+                ) : isPermitCalendarEvent(ev) ? (
+                  <span className="shrink-0 rounded border border-amber-400 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                    인허가
                   </span>
                 ) : (
                   <button

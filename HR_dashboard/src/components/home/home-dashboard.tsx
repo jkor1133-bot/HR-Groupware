@@ -7,8 +7,9 @@ import { CalendarPanel } from "@/components/home/calendar-panel";
 import { ContractsAlertsPanel } from "@/components/home/contracts-alerts-panel";
 import { HrDashboardView } from "@/components/home/hr-dashboard-view";
 import { LaborCostPanel } from "@/components/home/labor-cost-panel";
-import { LeavePanel } from "@/components/home/leave-panel";
+import { KpiProgressPanel } from "@/components/home/kpi-progress-panel";
 import { ScheduleOverview } from "@/components/home/schedule-overview";
+import { WeeklyProgressPanel } from "@/components/home/weekly-progress-panel";
 import { WorkHoursPanel } from "@/components/home/work-hours-panel";
 import { useHomeLayout } from "@/hooks/use-home-layout";
 import type { HomeViewId, HomeWidgetConfig, HomeWidgetId } from "@/lib/types";
@@ -37,8 +38,10 @@ function OpsWidgets() {
         return <ScheduleOverview />;
       case "calendar":
         return <CalendarPanel />;
-      case "leave":
-        return <LeavePanel />;
+      case "weekly_progress":
+        return <WeeklyProgressPanel />;
+      case "kpi_progress":
+        return <KpiProgressPanel />;
       case "contracts_alerts":
         return <ContractsAlertsPanel />;
       case "labor_cost":

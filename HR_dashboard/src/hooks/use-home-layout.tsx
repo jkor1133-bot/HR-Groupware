@@ -9,7 +9,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { defaultHomeLayout } from "@/data/home-layout";
+import {
+  HOME_LAYOUT_VERSION,
+  defaultHomeLayout,
+} from "@/data/home-layout";
 import type {
   HomeLayoutPrefs,
   HomeViewId,
@@ -67,10 +70,78 @@ function normalize(prefs: HomeLayoutPrefs): HomeLayoutPrefs {
     });
   }
 
+  let opsWidgets = merge(prefs.opsWidgets, seed.opsWidgets);
+
+  // v4: 연차 위젯 제거 → 이번주 업무 진행 · KPI 진척 추가
+  if ((prefs.version ?? 1) < 4) {
+    const byId = new Map(opsWidgets.map((w) => [w.id, w]));
+    const leave = byId.get("leave" as HomeWidgetId);
+    const orderIds = seed.opsWidgets.map((w) => w.id);
+    opsWidgets = orderIds.map((id, order) => {
+      const prev = byId.get(id);
+      const visible =
+        prev?.visible ??
+        (id === "weekly_progress"
+          ? leave?.visible !== false
+          : id === "kpi_progress"
+            ? false
+            : seed.opsWidgets.find((w) => w.id === id)?.visible ?? true);
+      const size =
+        prev?.size ??
+        seed.opsWidgets.find((w) => w.id === id)?.size ??
+        "half";
+      return { id, order, visible, size };
+    });
+  }
+
+  // v5: KPI 단독 위젯 숨기고 업무 진행 패널에 포함
+  if ((prefs.version ?? 1) < 5) {
+    opsWidgets = opsWidgets.map((w) =>
+      w.id === "kpi_progress" ? { ...w, visible: false } : w,
+    );
+  }
+
+  // v6: 계약·인허가 알림 단독 위젯 숨김 (Calendar에 표시)
+  if ((prefs.version ?? 1) < 6) {
+    opsWidgets = opsWidgets.map((w) =>
+      w.id === "contracts_alerts" ? { ...w, visible: false } : w,
+    );
+  }
+
+  // v7: KPI를 Calendar·이번주 업무진행 아래 전체 너비로
+  if ((prefs.version ?? 1) < 7) {
+    const byId = new Map(opsWidgets.map((w) => [w.id, w]));
+    const orderIds = [
+      "weekly_plans",
+      "calendar",
+      "weekly_progress",
+      "kpi_progress",
+      "contracts_alerts",
+      "labor_cost",
+      "work_hours",
+    ] as const;
+    opsWidgets = orderIds.map((id, order) => {
+      const prev = byId.get(id);
+      const def = seed.opsWidgets.find((w) => w.id === id);
+      return {
+        id,
+        order,
+        visible:
+          id === "kpi_progress"
+            ? true
+            : (prev?.visible ?? def?.visible ?? false),
+        size:
+          id === "kpi_progress" || id === "weekly_plans"
+            ? ("full" as const)
+            : (prev?.size ?? def?.size ?? "half"),
+      };
+    });
+  }
+
   return {
-    version: 3,
+    version: HOME_LAYOUT_VERSION,
     defaultView: prefs.defaultView === "hr" ? "hr" : "ops",
-    opsWidgets: merge(prefs.opsWidgets, seed.opsWidgets),
+    opsWidgets,
     hrWidgets,
   };
 }

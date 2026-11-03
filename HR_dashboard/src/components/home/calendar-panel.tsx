@@ -18,6 +18,19 @@ import {
 } from "@/components/calendar/event-form-dialog";
 import { Button } from "@/components/ui/button";
 import { useCalendar } from "@/hooks/use-calendar";
+import { useLocalList } from "@/hooks/use-local-list";
+import {
+  collectContractAlerts,
+  collectPermitAlerts,
+  type DeadlineAlert,
+} from "@/lib/deadline-alerts";
+import {
+  CONTRACTS_STORAGE_KEY,
+  PERMITS_STORAGE_KEY,
+  loadContracts,
+  loadPermits,
+} from "@/lib/hr-ops-storage";
+import { formatDaysLeft } from "@/lib/period";
 import type { CalendarEvent } from "@/lib/types";
 import { addDays, formatYmd } from "@/lib/week";
 import { cn } from "@/lib/utils";
@@ -35,8 +48,17 @@ function eventLabel(ev: CalendarEvent) {
   return `${ev.startTime} ${ev.title}`;
 }
 
+function deadlineShortLabel(alert: DeadlineAlert) {
+  if (alert.kind === "contract") {
+    return alert.severity === "overdue" ? "계약 만료" : "계약 임박";
+  }
+  return alert.severity === "overdue" ? "인허가 만료" : "인허가 임박";
+}
+
 export function CalendarPanel() {
   const { hydrated, eventsOn, upsert, remove, members } = useCalendar();
+  const contracts = useLocalList(CONTRACTS_STORAGE_KEY, loadContracts);
+  const permits = useLocalList(PERMITS_STORAGE_KEY, loadPermits);
   const [cursor, setCursor] = useState<Date | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -44,6 +66,9 @@ export function CalendarPanel() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingCreatedAt, setEditingCreatedAt] = useState<string | undefined>();
   const [detail, setDetail] = useState<CalendarEvent | null>(null);
+  const [deadlineDetail, setDeadlineDetail] = useState<DeadlineAlert | null>(
+    null,
+  );
 
   useEffect(() => {
     const now = new Date();
@@ -59,6 +84,21 @@ export function CalendarPanel() {
     [members],
   );
   const todayYmd = formatYmd(new Date());
+
+  const deadlinesByDate = useMemo(() => {
+    const now = new Date();
+    const all = [
+      ...collectContractAlerts(contracts.items, now),
+      ...collectPermitAlerts(permits.items, now),
+    ];
+    const map = new Map<string, DeadlineAlert[]>();
+    for (const a of all) {
+      const list = map.get(a.dueDate) ?? [];
+      list.push(a);
+      map.set(a.dueDate, list);
+    }
+    return map;
+  }, [contracts.items, permits.items]);
 
   function openCreate(date?: string) {
     const d = date ?? selected ?? todayYmd;
@@ -98,7 +138,11 @@ export function CalendarPanel() {
             Calendar · 일정 / 오늘 할 일
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            직접 입력한 일정만 표시 · 주간업무 기한은 Calendar 페이지에서 확인
+            일정 ·{" "}
+            <span className="text-dh-red">계약 만료/임박</span> ·{" "}
+            <span className="text-amber-700 dark:text-amber-300">
+              인허가 종료/임박
+            </span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -154,6 +198,19 @@ export function CalendarPanel() {
             const isSelected = ymd === selected;
             const isToday = ymd === todayYmd;
             const list = eventsOn(ymd);
+            const deadlines = deadlinesByDate.get(ymd) ?? [];
+            const hasDeadline = deadlines.length > 0;
+            const hasOverdue = deadlines.some((a) => a.severity === "overdue");
+            const slots = 3;
+            const deadlineShow = deadlines.slice(0, Math.min(2, slots));
+            const eventShow = list.slice(
+              0,
+              Math.max(0, slots - deadlineShow.length),
+            );
+            const more =
+              deadlines.length -
+              deadlineShow.length +
+              (list.length - eventShow.length);
             return (
               <div
                 key={ymd}
@@ -169,6 +226,11 @@ export function CalendarPanel() {
                   !inMonth && "bg-muted/40 text-muted-foreground/50",
                   isSelected && "ring-1 ring-inset ring-dh-real",
                   inMonth && "hover:bg-muted/30",
+                  hasDeadline &&
+                    inMonth &&
+                    (hasOverdue
+                      ? "bg-[#fceeee]/70 dark:bg-red-950/25"
+                      : "bg-amber-50/80 dark:bg-amber-950/20"),
                 )}
               >
                 <span
@@ -181,7 +243,33 @@ export function CalendarPanel() {
                   {d.getDate()}
                 </span>
                 <ul className="min-h-0 flex-1 space-y-0.5 overflow-hidden">
-                  {list.slice(0, 3).map((ev) => (
+                  {deadlineShow.map((a) => (
+                    <li key={a.id}>
+                      <button
+                        type="button"
+                        title={`${a.title} · ${a.detail} · ${a.daysLeftLabel}`}
+                        className={cn(
+                          "flex w-full items-center gap-1 truncate rounded px-1 py-0.5 text-left text-[10px] font-semibold leading-snug sm:text-[11px]",
+                          a.kind === "contract"
+                            ? "bg-[#fceeee] text-dh-red hover:bg-red-100 dark:bg-red-950/40"
+                            : "bg-amber-100 text-amber-800 hover:bg-amber-200/80 dark:bg-amber-950/40 dark:text-amber-200",
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelected(ymd);
+                          setDeadlineDetail(a);
+                        }}
+                      >
+                        <span className="truncate">
+                          {deadlineShortLabel(a)}
+                          {deadlines.length === 1
+                            ? ` · ${a.daysLeftLabel}`
+                            : ""}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                  {eventShow.map((ev) => (
                     <li key={ev.id}>
                       <button
                         type="button"
@@ -204,9 +292,9 @@ export function CalendarPanel() {
                       </button>
                     </li>
                   ))}
-                  {list.length > 3 ? (
+                  {more > 0 ? (
                     <li className="px-1 text-[10px] text-muted-foreground">
-                      +{list.length - 3}
+                      +{more}
                     </li>
                   ) : null}
                 </ul>
@@ -246,6 +334,53 @@ export function CalendarPanel() {
           }
         }}
       />
+
+      {deadlineDetail ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setDeadlineDetail(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-border bg-card p-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p
+              className={cn(
+                "text-xs font-semibold",
+                deadlineDetail.kind === "contract"
+                  ? "text-dh-red"
+                  : "text-amber-700 dark:text-amber-300",
+              )}
+            >
+              {deadlineShortLabel(deadlineDetail)} ·{" "}
+              {formatDaysLeft(deadlineDetail.daysLeft)}
+            </p>
+            <p className="mt-1 font-heading text-base font-semibold text-dh-deep dark:text-dh-light">
+              {deadlineDetail.title}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {deadlineDetail.detail}
+            </p>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDeadlineDetail(null)}
+              >
+                닫기
+              </Button>
+              <Link
+                href={deadlineDetail.href}
+                className="inline-flex h-8 items-center rounded-md bg-dh-real px-3 text-xs font-medium text-white hover:opacity-90"
+              >
+                이력에서 보기
+              </Link>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -381,8 +381,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
         </aside>
 
-        <main className="@container/app min-w-0 flex-1 overflow-auto p-3 sm:p-5 lg:p-6">
-          <div className="mx-auto w-full max-w-7xl">{children}</div>
+        <main className="@container/app min-w-0 flex-1 overflow-auto p-3 sm:p-4 lg:px-5 lg:py-5 xl:px-6">
+          <div className="mx-auto w-full max-w-[1680px]">{children}</div>
         </main>
       </div>
     </div>

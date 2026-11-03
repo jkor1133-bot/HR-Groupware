@@ -98,8 +98,12 @@ export type CalendarAttachment = {
 
 export type CalendarVisibility = "공개" | "비공개";
 
-/** calendar=직접 입력, weekly=주간업무 기한(표시 전용) */
-export type CalendarEventSource = "calendar" | "weekly";
+/** calendar=직접 입력, weekly=주간업무, contract/permit=만료·종료 임박(표시 전용) */
+export type CalendarEventSource =
+  | "calendar"
+  | "weekly"
+  | "contract"
+  | "permit";
 
 export type CalendarEvent = {
   id: string;
@@ -187,7 +191,8 @@ export type HomeViewId = "ops" | "hr";
 export type HomeWidgetId =
   | "weekly_plans"
   | "calendar"
-  | "leave"
+  | "weekly_progress"
+  | "kpi_progress"
   | "contracts_alerts"
   | "labor_cost"
   | "work_hours"
@@ -195,6 +200,54 @@ export type HomeWidgetId =
   | "hr_org"
   | "hr_demographics"
   | "hr_compensation";
+
+/** 인사총무팀 연간 KPI (전략과제) */
+export type TeamKpiScope = "전사KPI" | "본부KPI" | "팀KPI" | "개인KPI";
+
+export const TEAM_KPI_SCOPES: TeamKpiScope[] = [
+  "전사KPI",
+  "본부KPI",
+  "팀KPI",
+  "개인KPI",
+];
+export type TeamKpiIndicatorType = "정성" | "정량";
+export type TeamKpiGrade = "S" | "A" | "B" | "C" | "D";
+/** 달성률 표시 (G 100%↑ / Y 90%↑ / R 90%↓) — 등급과 별개 */
+export type TeamKpiTraffic = "" | "G" | "Y" | "R";
+
+export type TeamAnnualKpi = {
+  id: string;
+  /** 평가 연도 */
+  year: number;
+  scope: TeamKpiScope;
+  /** 상위 KPI */
+  parentKpi: string;
+  /** KPI(과제명) */
+  title: string;
+  /** 산식/평가착안점 */
+  evaluationNote: string;
+  /** 연간 목표 */
+  annualGoal: string;
+  /** 비중 (%) */
+  weight: number;
+  indicatorType: TeamKpiIndicatorType;
+  /** 등급 기준 설명 (S~D) — UI 미사용 */
+  gradeCriteria?: Partial<Record<TeamKpiGrade, string>>;
+  gradeBasis?: string;
+  /**
+   * 1~12월 수치(선택). 정성 0~100 / 정량 실적.
+   * 표 양식은 주로 텍스트(당월·누계)로 관리.
+   */
+  monthValues: number[];
+  /** @deprecated monthWorkNotes 사용 */
+  monthNotes?: string[];
+  /** 당월에 한 내용 (월별) */
+  monthWorkNotes: string[];
+  /** 누계 기준 진행 내용 (월별 스냅샷) */
+  ytdProgressNotes: string[];
+  /** 월별 달성 신호등 */
+  monthTraffic: TeamKpiTraffic[];
+};
 
 export type HomeWidgetSize = "half" | "full";
 

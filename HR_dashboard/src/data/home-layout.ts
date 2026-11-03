@@ -5,7 +5,8 @@ export const OPS_WIDGET_META: Record<
     HomeWidgetId,
     | "weekly_plans"
     | "calendar"
-    | "leave"
+    | "weekly_progress"
+    | "kpi_progress"
     | "contracts_alerts"
     | "labor_cost"
     | "work_hours"
@@ -20,13 +21,17 @@ export const OPS_WIDGET_META: Record<
     label: "Calendar",
     description: "일정 / 오늘 할 일",
   },
-  leave: {
-    label: "연차 신청 현황",
-    description: "오늘·이번 주 연차",
+  weekly_progress: {
+    label: "이번 주 업무 진행",
+    description: "예정·진행·완료·지연 요약",
+  },
+  kpi_progress: {
+    label: "KPI 진척사항",
+    description: "전략과제 당월·누계 · Calendar 아래",
   },
   contracts_alerts: {
-    label: "계약·인허가 알림",
-    description: "1개월 내 만료 알림",
+    label: "계약·인허가 알림 (단독)",
+    description: "Calendar에 표시 · 기본 숨김",
   },
   labor_cost: {
     label: "인건비 현황",
@@ -68,11 +73,14 @@ function opsDefaults(): HomeWidgetConfig[] {
   return ids.map((id, order) => ({
     id,
     order,
-    visible: !["labor_cost", "work_hours"].includes(id),
+    visible: !["labor_cost", "work_hours", "contracts_alerts"].includes(id),
     size:
-      id === "weekly_plans" || id === "contracts_alerts" ? "full" : "half",
+      id === "weekly_plans" || id === "kpi_progress" ? "full" : "half",
   }));
 }
+
+/** v7: KPI는 Calendar·업무진행 아래 전체 너비 */
+export const HOME_LAYOUT_VERSION = 7;
 
 /** 화면 고정 순서: KPI7 → 도넛 → KPI2 → 비교표 */
 const HR_ORDER: (keyof typeof HR_WIDGET_META)[] = [
@@ -93,7 +101,7 @@ function hrDefaults(): HomeWidgetConfig[] {
 
 export function defaultHomeLayout(): HomeLayoutPrefs {
   return {
-    version: 3,
+    version: HOME_LAYOUT_VERSION,
     defaultView: "ops",
     opsWidgets: opsDefaults(),
     hrWidgets: hrDefaults(),
