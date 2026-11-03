@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { useEmployees } from "@/hooks/use-employees";
 import {
   EMPLOYEE_DEPARTMENTS,
@@ -30,6 +31,7 @@ import {
 } from "@/lib/employee-roster";
 import {
   cellDate,
+  cellNum,
   cellStr,
   cellTitleYears,
   downloadRowsAsExcel,
@@ -37,6 +39,21 @@ import {
   readExcelFile,
 } from "@/lib/excel";
 import type { EmployeeRosterRecord } from "@/lib/types";
+
+const EMPLOYEE_EXCEL_HEADERS_BASE = [
+  "상위부서",
+  "부서",
+  "파트",
+  "사번",
+  "성명",
+  "직위",
+  "직책",
+  "직군",
+  "성별",
+  "직위년차",
+  "그룹입사일자",
+  "입사일자",
+] as const;
 
 type FormState = {
   division: string;
@@ -49,9 +66,20 @@ type FormState = {
   jobTrack: string;
   gender: string;
   titleYears: string;
+  salary: string;
   groupHireDate: string;
   hireDate: string;
 };
+
+function parseSalaryInput(raw: string): number {
+  const n = Number(String(raw).replace(/[,₩원\s]/g, ""));
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+function formatSalaryDisplay(n: number) {
+  if (!n || n <= 0) return "—";
+  return n.toLocaleString("ko-KR");
+}
 
 type FilterKey =
   | "division"
@@ -84,6 +112,7 @@ function emptyForm(): FormState {
     jobTrack: "일반직",
     gender: "남자",
     titleYears: "1",
+    salary: "",
     groupHireDate: "",
     hireDate: "",
   };
@@ -93,7 +122,11 @@ function cloneItems(items: EmployeeRosterRecord[]) {
   return JSON.parse(JSON.stringify(items)) as EmployeeRosterRecord[];
 }
 
-function toRecord(form: FormState, id: string): EmployeeRosterRecord {
+function toRecord(
+  form: FormState,
+  id: string,
+  options?: { includeSalary?: boolean },
+): EmployeeRosterRecord {
   return {
     id,
     division: form.division,
@@ -106,6 +139,7 @@ function toRecord(form: FormState, id: string): EmployeeRosterRecord {
     jobTrack: form.jobTrack,
     gender: form.gender,
     titleYears: Number(form.titleYears) || 0,
+    salary: options?.includeSalary ? parseSalaryInput(form.salary) : 0,
     groupHireDate: form.groupHireDate,
     hireDate: form.hireDate,
   };
@@ -114,36 +148,47 @@ function toRecord(form: FormState, id: string): EmployeeRosterRecord {
 const selectClass =
   "h-8 w-full rounded-md border border-border bg-background px-2 text-sm disabled:opacity-60";
 
-/** 업로드·내보내기 엑셀 컬럼 (생년월일·나이 미포함) */
-const EMPLOYEE_EXCEL_HEADERS = [
-  "상위부서",
-  "부서",
-  "파트",
-  "사번",
-  "성명",
-  "직위",
-  "직책",
-  "직군",
-  "성별",
-  "직위년차",
-  "그룹입사일자",
-  "입사일자",
-] as const;
+function excelHeaders(includeSalary: boolean): string[] {
+  if (!includeSalary) return [...EMPLOYEE_EXCEL_HEADERS_BASE];
+  const headers: string[] = [...EMPLOYEE_EXCEL_HEADERS_BASE];
+  const idx = headers.indexOf("직위년차");
+  headers.splice(idx + 1, 0, "연봉");
+  return headers;
+}
 
-const EMPLOYEE_EXCEL_SAMPLE: Record<string, string | number> = {
-  상위부서: "국제물류사업본부",
-  부서: "곡물사업팀",
-  파트: "곡물관리파트",
-  사번: "20260001",
-  성명: "홍길동",
-  직위: "대리",
-  직책: "팀원",
-  직군: "일반직",
-  성별: "남자",
-  직위년차: 1,
-  그룹입사일자: "2020-03-02",
-  입사일자: "2020-03-02",
-};
+function excelSample(includeSalary: boolean): Record<string, string | number> {
+  const base: Record<string, string | number> = {
+    상위부서: "국제물류사업본부",
+    부서: "곡물사업팀",
+    파트: "곡물관리파트",
+    사번: "20260001",
+    성명: "홍길동",
+    직위: "대리",
+    직책: "팀원",
+    직군: "일반직",
+    성별: "남자",
+    직위년차: 1,
+    그룹입사일자: "2020-03-02",
+    입사일자: "2020-03-02",
+  };
+  if (includeSalary) base.연봉 = 54000000;
+  return base;
+}
+
+function findExistingSalary(
+  items: EmployeeRosterRecord[],
+  empNo: string,
+  name: string,
+) {
+  const byNo = empNo
+    ? items.find((e) => e.empNo.trim() === empNo.trim())
+    : undefined;
+  if (byNo) return byNo.salary || 0;
+  const byName = name
+    ? items.find((e) => e.name.trim() === name.trim())
+    : undefined;
+  return byName?.salary || 0;
+}
 
 const FILTERABLE: {
   key: FilterKey;
@@ -243,6 +288,8 @@ function ColumnFilter({
 
 export function EmployeeRosterPanel() {
   const list = useEmployees();
+  const { isAdmin } = useCurrentUser();
+  const canViewSalary = isAdmin;
   const fileRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [editing, setEditing] = useState(false);
@@ -338,7 +385,9 @@ export function EmployeeRosterPanel() {
       window.alert("사번과 성명은 필수입니다.");
       return;
     }
-    const item = toRecord(form, `emp-${Date.now()}`);
+    const item = toRecord(form, `emp-${Date.now()}`, {
+      includeSalary: canViewSalary,
+    });
     if (editing) {
       setDraft((prev) => [...(prev ?? cloneItems(list.items)), item]);
     } else {
@@ -348,13 +397,15 @@ export function EmployeeRosterPanel() {
   }
 
   function patchRow(id: string, next: Partial<EmployeeRosterRecord>) {
+    const patch = { ...next };
+    if (!canViewSalary) delete patch.salary;
     setDraft((prev) => {
       const base = prev ?? cloneItems(list.items);
       return base.map((row) => {
         if (row.id !== id) return row;
-        const merged = { ...row, ...next };
-        if (next.division && next.division !== row.division) {
-          const depts = departmentsForDivision(next.division);
+        const merged = { ...row, ...patch };
+        if (patch.division && patch.division !== row.division) {
+          const depts = departmentsForDivision(patch.division);
           if (!depts.includes(merged.department)) {
             merged.department = depts[0] ?? "";
           }
@@ -379,6 +430,7 @@ export function EmployeeRosterPanel() {
     rows: Record<string, unknown>[],
     idPrefix: string,
   ): EmployeeRosterRecord[] {
+    const source = editing && draft ? draft : list.items;
     return rows
       .map((row, i) => {
         const division =
@@ -389,18 +441,27 @@ export function EmployeeRosterPanel() {
           cellStr(row, "부서", "팀", "department", "소속") ||
           depts[0] ||
           "";
+        const empNo = cellStr(row, "사번", "empNo", "사원번호");
+        const name = cellStr(row, "성명", "이름", "name");
+        const importedSalary = Math.max(
+          0,
+          Math.floor(cellNum(row, "연봉", "연봉(원)", "salary")),
+        );
         return {
           id: `${idPrefix}-${Date.now()}-${i}`,
           division,
           department,
           part: cellStr(row, "파트", "part", "세부파트"),
-          empNo: cellStr(row, "사번", "empNo", "사원번호"),
-          name: cellStr(row, "성명", "이름", "name"),
+          empNo,
+          name,
           title: cellStr(row, "직위", "title") || "사원",
           jobRole: cellStr(row, "직책", "jobRole") || "팀원",
           jobTrack: cellStr(row, "직군", "jobTrack") || "일반직",
           gender: cellStr(row, "성별", "gender") || "남자",
           titleYears: cellTitleYears(row, 1),
+          salary: canViewSalary
+            ? importedSalary
+            : findExistingSalary(source, empNo, name),
           groupHireDate: cellDate(
             row,
             "그룹입사일자",
@@ -477,25 +538,29 @@ export function EmployeeRosterPanel() {
   }
 
   function exportExcel(asTemplate = false) {
-    const headers = [...EMPLOYEE_EXCEL_HEADERS];
-    const dataRows = displayed.map((e) => ({
-      상위부서: e.division,
-      부서: e.department,
-      파트: e.part,
-      사번: e.empNo,
-      성명: e.name,
-      직위: e.title,
-      직책: e.jobRole,
-      직군: e.jobTrack,
-      성별: e.gender,
-      직위년차: e.titleYears,
-      그룹입사일자: e.groupHireDate,
-      입사일자: e.hireDate,
-    }));
+    const headers = excelHeaders(canViewSalary);
+    const dataRows = displayed.map((e) => {
+      const row: Record<string, string | number> = {
+        상위부서: e.division,
+        부서: e.department,
+        파트: e.part,
+        사번: e.empNo,
+        성명: e.name,
+        직위: e.title,
+        직책: e.jobRole,
+        직군: e.jobTrack,
+        성별: e.gender,
+        직위년차: e.titleYears,
+        그룹입사일자: e.groupHireDate,
+        입사일자: e.hireDate,
+      };
+      if (canViewSalary) row.연봉 = e.salary || "";
+      return row;
+    });
 
     const rows =
       asTemplate || dataRows.length === 0
-        ? [EMPLOYEE_EXCEL_SAMPLE]
+        ? [excelSample(canViewSalary)]
         : dataRows;
 
     downloadRowsAsExcel(
@@ -518,6 +583,9 @@ export function EmployeeRosterPanel() {
           <p className="mt-1 text-xs text-muted-foreground">
             임직원 기본 정보를 등록합니다. 표 헤더(상위부서·부서·직위·직책·직군·성별)는
             여러 값을 골라 필터할 수 있습니다.
+            {canViewSalary
+              ? " 연봉은 관리자만 열람·수정할 수 있습니다."
+              : " 연봉은 관리자만 확인할 수 있어 이 화면에는 표시되지 않습니다."}
           </p>
           {hasActiveFilters ? (
             <p className="mt-1 text-xs font-medium text-dh-real">
@@ -620,6 +688,9 @@ export function EmployeeRosterPanel() {
               <p className="mt-0.5 text-xs text-muted-foreground">
                 엑셀에서 헤더(상위부서, 부서, 파트, 사번, 성명 …) 포함 범위를
                 복사한 뒤 아래에 Ctrl+V 하세요. 파일 업로드가 막혀도 됩니다.
+                {canViewSalary
+                  ? " 연봉 열은 관리자만 반영됩니다."
+                  : " 연봉은 관리자만 입력·확인할 수 있어 붙여넣기에 포함되지 않습니다."}
               </p>
             </div>
             <Button
@@ -638,7 +709,9 @@ export function EmployeeRosterPanel() {
             value={pasteText}
             onChange={(e) => setPasteText(e.target.value)}
             placeholder={
-              "상위부서\t부서\t파트\t사번\t성명\t직위\t직책\t직군\t성별\t직위년차\t그룹입사일자\t입사일자\n경영지원본부\t인사총무팀\t\t20260001\t홍길동\t대리\t팀원\t일반직\t남자\t1\t2020-03-02\t2020-03-02"
+              canViewSalary
+                ? "상위부서\t부서\t파트\t사번\t성명\t직위\t직책\t직군\t성별\t직위년차\t연봉\t그룹입사일자\t입사일자\n경영지원본부\t인사총무팀\t\t20260001\t홍길동\t대리\t팀원\t일반직\t남자\t1\t54000000\t2020-03-02\t2020-03-02"
+                : "상위부서\t부서\t파트\t사번\t성명\t직위\t직책\t직군\t성별\t직위년차\t그룹입사일자\t입사일자\n경영지원본부\t인사총무팀\t\t20260001\t홍길동\t대리\t팀원\t일반직\t남자\t1\t2020-03-02\t2020-03-02"
             }
             className="min-h-[9rem] font-mono text-xs"
           />
@@ -799,6 +872,20 @@ export function EmployeeRosterPanel() {
             }
           />
         </div>
+        {canViewSalary ? (
+          <div className="grid gap-1">
+            <Label>연봉 (원) · 관리자</Label>
+            <Input
+              type="text"
+              inputMode="numeric"
+              value={form.salary}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, salary: e.target.value }))
+              }
+              placeholder="예: 54000000"
+            />
+          </div>
+        ) : null}
         <div className="grid gap-1">
           <Label>그룹입사일자</Label>
           <Input
@@ -828,7 +915,12 @@ export function EmployeeRosterPanel() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="gw-data-table w-full min-w-[1080px] text-sm">
+        <table
+          className={cn(
+            "gw-data-table w-full text-sm",
+            canViewSalary ? "min-w-[1180px]" : "min-w-[1080px]",
+          )}
+        >
           <thead>
             <tr className="bg-dh-deep text-white">
               {FILTERABLE.slice(0, 2).map(({ key, label }) => (
@@ -855,6 +947,7 @@ export function EmployeeRosterPanel() {
                 </th>
               ))}
               <th className="px-2 py-2">직위년차</th>
+              {canViewSalary ? <th className="px-2 py-2">연봉</th> : null}
               <th className="px-2 py-2">그룹입사</th>
               <th className="px-2 py-2">입사</th>
               <th className="px-2 py-2" />
@@ -864,7 +957,7 @@ export function EmployeeRosterPanel() {
             {!list.hydrated ? (
               <tr>
                 <td
-                  colSpan={13}
+                  colSpan={canViewSalary ? 14 : 13}
                   className="px-3 py-8 text-center text-muted-foreground"
                 >
                   불러오는 중…
@@ -873,7 +966,7 @@ export function EmployeeRosterPanel() {
             ) : displayed.length === 0 ? (
               <tr>
                 <td
-                  colSpan={13}
+                  colSpan={canViewSalary ? 14 : 13}
                   className="px-3 py-8 text-center text-muted-foreground"
                 >
                   {working.length === 0
@@ -1072,6 +1165,26 @@ export function EmployeeRosterPanel() {
                         e.titleYears
                       )}
                     </td>
+                    {canViewSalary ? (
+                      <td className="px-1.5 py-1 tabular-nums">
+                        {editing ? (
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            className="h-8 min-w-[7rem] px-2 text-sm"
+                            value={e.salary ? String(e.salary) : ""}
+                            placeholder="원"
+                            onChange={(ev) =>
+                              patchRow(e.id, {
+                                salary: parseSalaryInput(ev.target.value),
+                              })
+                            }
+                          />
+                        ) : (
+                          formatSalaryDisplay(e.salary)
+                        )}
+                      </td>
+                    ) : null}
                     <td className="px-1.5 py-1">
                       {editing ? (
                         <Input

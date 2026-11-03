@@ -618,6 +618,19 @@ export type TrendPoint = {
   actual: number;
 };
 
+/** 근무시간 세부(연장·야간·휴일·휴일연장) 추이 */
+export type HourDetailTrendPoint = {
+  label: string;
+  overtimePlan: number;
+  nightPlan: number;
+  holidayPlan: number;
+  holidayOtPlan: number;
+  overtimeActual: number;
+  nightActual: number;
+  holidayActual: number;
+  holidayOtActual: number;
+};
+
 function scopedRows(
   rows: TeamPeriodMetric[],
   teams?: readonly OrgTeam[],
@@ -625,6 +638,34 @@ function scopedRows(
   if (!teams?.length) return rows;
   const set = new Set(teams);
   return rows.filter((r) => set.has(r.team));
+}
+
+function emptyDetailTrend(label: string): HourDetailTrendPoint {
+  return {
+    label,
+    overtimePlan: 0,
+    nightPlan: 0,
+    holidayPlan: 0,
+    holidayOtPlan: 0,
+    overtimeActual: 0,
+    nightActual: 0,
+    holidayActual: 0,
+    holidayOtActual: 0,
+  };
+}
+
+function addDetailFromRow(
+  point: HourDetailTrendPoint,
+  r: TeamPeriodMetric,
+) {
+  for (const key of WORK_HOUR_DETAIL_KEYS) {
+    const planKey = `${key}Plan` as keyof HourDetailTrendPoint;
+    const actualKey = `${key}Actual` as keyof HourDetailTrendPoint;
+    const plan = metricValue(r, "plan", key);
+    const actual = metricValue(r, "actual", key);
+    (point[planKey] as number) += plan;
+    (point[actualKey] as number) += actual;
+  }
 }
 
 /** 선택 연도의 월별 전사 계획·실적 */
@@ -680,6 +721,58 @@ export function buildYearlyTrend(
       actual += metricValue(r, "actual");
     }
     return { label: `${year}년`, plan, actual };
+  });
+}
+
+/** 월별 근무시간 세부 구성 */
+export function buildMonthlyHourDetailTrend(
+  rows: TeamPeriodMetric[],
+  year: number,
+  teams?: readonly OrgTeam[],
+): HourDetailTrendPoint[] {
+  const scoped = scopedRows(rows, teams);
+  return Array.from({ length: 12 }, (_, i) => {
+    const m = i + 1;
+    const ym = `${year}-${String(m).padStart(2, "0")}`;
+    const point = emptyDetailTrend(`${m}월`);
+    for (const r of scoped) {
+      if (r.yearMonth !== ym) continue;
+      addDetailFromRow(point, r);
+    }
+    return point;
+  });
+}
+
+/** 연도별 근무시간 세부 구성 */
+export function buildYearlyHourDetailTrend(
+  rows: TeamPeriodMetric[],
+  teams?: readonly OrgTeam[],
+  focusYear?: number,
+): HourDetailTrendPoint[] {
+  const scoped = scopedRows(rows, teams);
+  const years = new Set<number>();
+  for (const r of scoped) {
+    const y = Number(r.yearMonth.slice(0, 4));
+    if (Number.isFinite(y)) years.add(y);
+  }
+  if (focusYear) {
+    years.add(focusYear);
+    years.add(focusYear - 1);
+  }
+  const sorted = [...years].sort((a, b) => a - b);
+  if (!sorted.length && focusYear) {
+    return [
+      emptyDetailTrend(`${focusYear - 1}년`),
+      emptyDetailTrend(`${focusYear}년`),
+    ];
+  }
+  return sorted.map((year) => {
+    const point = emptyDetailTrend(`${year}년`);
+    for (const r of scoped) {
+      if (!r.yearMonth.startsWith(String(year))) continue;
+      addDetailFromRow(point, r);
+    }
+    return point;
   });
 }
 

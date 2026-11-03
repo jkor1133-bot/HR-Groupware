@@ -25,12 +25,14 @@ type Props = {
 };
 
 function normalizeEmp(emp: EmployeeRosterRecord): EmployeeRosterRecord {
+  const salaryRaw = Number(emp.salary);
   return {
     ...emp,
     titleYears:
       typeof emp.titleYears === "number" && Number.isFinite(emp.titleYears)
         ? emp.titleYears
         : Number(emp.titleYears) || 1,
+    salary: Number.isFinite(salaryRaw) && salaryRaw > 0 ? Math.floor(salaryRaw) : 0,
   };
 }
 

@@ -200,6 +200,7 @@ export function StaffMovementsPanel() {
         jobTrack: form.jobTrack,
         gender: form.gender,
         titleYears: 1,
+        salary: 0,
         groupHireDate: form.eventDate,
         hireDate: form.eventDate,
       };
@@ -220,6 +221,7 @@ export function StaffMovementsPanel() {
           part: existing.part,
           jobRole: existing.jobRole,
           titleYears: existing.titleYears,
+          salary: existing.salary,
         });
       } else {
         roster.upsert(rosterItem);

@@ -14,6 +14,7 @@ import {
   seedTeamHoursMetrics,
   seedTeamLaborMetrics,
 } from "@/data/hr-ops-seed";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { useEmployees } from "@/hooks/use-employees";
 import { useLocalList } from "@/hooks/use-local-list";
 import { useHomeLayout } from "@/hooks/use-home-layout";
@@ -28,8 +29,10 @@ import {
 } from "@/lib/hr-metrics";
 import { currentYearMonth } from "@/lib/period";
 import {
+  HR_FILTER_TEAM_ORDER,
   rosterFilterOptions,
   rosterToHrEmployees,
+  sortByPreferredOrder,
 } from "@/lib/roster-to-hr";
 import { leaveMovementsToHrEmployees } from "@/lib/staff-movements";
 import {
@@ -54,10 +57,13 @@ function KpiCard({
   label,
   value,
   hint,
+  note,
 }: {
   label: string;
   value: string;
   hint?: string;
+  /** 지표 하단 작은 주석 */
+  note?: string;
 }) {
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -68,6 +74,11 @@ function KpiCard({
       {hint ? (
         <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>
       ) : null}
+      {note ? (
+        <p className="mt-1 text-[10px] leading-snug text-muted-foreground/80">
+          {note}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -75,6 +86,8 @@ function KpiCard({
 export function HrDashboardView() {
   const roster = useEmployees();
   const staffMovements = useStaffMovements();
+  const { isAdmin } = useCurrentUser();
+  const canViewSalary = isAdmin;
   const labor = useLocalList(
     "hr-dashboard-team-labor-v3",
     seedTeamLaborMetrics,
@@ -217,31 +230,38 @@ export function HrDashboardView() {
           set.add(t);
         }
       }
-      return [...set].sort((a, b) => a.localeCompare(b, "ko"));
+      return sortByPreferredOrder(set, HR_FILTER_TEAM_ORDER);
     }
-    return filterOpts.teams.filter((t) =>
-      roster.items.some(
-        (r) => r.department === t && r.division === filter.division,
+    return sortByPreferredOrder(
+      filterOpts.teams.filter((t) =>
+        roster.items.some(
+          (r) => r.department === t && r.division === filter.division,
+        ),
       ),
+      HR_FILTER_TEAM_ORDER,
     );
   }, [filter.division, filterOpts.teams, roster.items]);
 
   function exportRosterSnapshot() {
     downloadRowsAsExcel(
-      roster.items.map((e) => ({
-        상위부서: e.division,
-        부서: e.department,
-        파트: e.part,
-        사번: e.empNo,
-        성명: e.name,
-        직위: e.title,
-        직책: e.jobRole,
-        직군: e.jobTrack,
-        성별: e.gender,
-        직위년차: e.titleYears,
-        그룹입사일자: e.groupHireDate,
-        입사일자: e.hireDate,
-      })),
+      roster.items.map((e) => {
+        const row: Record<string, string | number> = {
+          상위부서: e.division,
+          부서: e.department,
+          파트: e.part,
+          사번: e.empNo,
+          성명: e.name,
+          직위: e.title,
+          직책: e.jobRole,
+          직군: e.jobTrack,
+          성별: e.gender,
+          직위년차: e.titleYears,
+          그룹입사일자: e.groupHireDate,
+          입사일자: e.hireDate,
+        };
+        if (canViewSalary) row.연봉 = e.salary || "";
+        return row;
+      }),
       "사원명부_대시보드반영.xlsx",
       "사원명부",
     );
@@ -296,19 +316,28 @@ export function HrDashboardView() {
                   : "사원명부에 생년월일 없음"
               }
             />
-            <KpiCard
-              label="평균 연봉"
-              value={
-                metrics.hasSalaryData
-                  ? formatManwon(metrics.avgSalary)
-                  : "—"
-              }
-              hint={
-                metrics.hasSalaryData
-                  ? `중앙값 ${formatManwon(metrics.medianSalary)}`
-                  : "사원명부에 연봉 없음"
-              }
-            />
+            {canViewSalary ? (
+              <KpiCard
+                label="평균 연봉"
+                value={
+                  metrics.hasSalaryData
+                    ? formatManwon(metrics.avgSalary)
+                    : "—"
+                }
+                hint={
+                  metrics.hasSalaryData
+                    ? `중앙값 ${formatManwon(metrics.medianSalary)}`
+                    : "사원명부에 연봉 없음"
+                }
+                note="※ 학자보조금, 장기근속포상 등 일부 비용 제외 · 관리자 전용"
+              />
+            ) : (
+              <KpiCard
+                label="평균 연봉"
+                value="—"
+                hint="관리자만 열람·입력 가능"
+              />
+            )}
             <KpiCard
               label="성별 구성"
               value={`${metrics.gender.malePct}:${metrics.gender.femalePct}`}

@@ -46,8 +46,8 @@ export const ORG_TEAMS: OrgTeam[] = [
   "재경팀",
   "신용관리팀",
   "곡물사업팀",
-  "기술팀",
   "SCM사업팀",
+  "기술팀",
   "구매팀",
   "영업팀",
   "물류지원팀",
@@ -68,7 +68,7 @@ export const TEAM_DIVISION: Record<OrgTeam, OrgDivision> = {
 
 export const TEAMS_BY_DIVISION: Record<OrgDivision, OrgTeam[]> = {
   경영지원본부: ["인사총무팀", "재경팀", "신용관리팀"],
-  국제물류사업본부: ["곡물사업팀", "기술팀", "SCM사업팀"],
+  국제물류사업본부: ["곡물사업팀", "SCM사업팀", "기술팀"],
   축산자원사업본부: ["구매팀", "영업팀", "물류지원팀"],
 };
 

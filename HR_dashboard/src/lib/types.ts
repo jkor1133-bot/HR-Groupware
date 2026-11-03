@@ -268,6 +268,8 @@ export type EmployeeRosterRecord = {
   gender: string;
   /** 직위년차 */
   titleYears: number;
+  /** 연봉(원). 0이면 미입력 */
+  salary: number;
   /** 그룹입사일자 YYYY-MM-DD */
   groupHireDate: string;
   /** 입사일자 YYYY-MM-DD */

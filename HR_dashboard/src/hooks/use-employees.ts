@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import {
+  EMPLOYEE_SALARY_IMPORT_FLAG,
+  applySalaryByName,
+} from "@/data/employee-salary-by-name";
 import { seedEmployeeRoster } from "@/data/employee-roster-seed";
 import {
   EMPLOYEES_STORAGE_KEY,
@@ -17,6 +21,17 @@ function parseStoredTitleYears(raw: Record<string, unknown>): number {
     if (Number.isFinite(n) && n >= 0 && n <= 60) return Math.floor(n);
   }
   return 1;
+}
+
+function parseStoredSalary(raw: Record<string, unknown>): number {
+  const candidates = [raw.salary, raw["연봉"], raw["연봉(원)"]];
+  for (const c of candidates) {
+    if (c == null || c === "") continue;
+    const n =
+      typeof c === "number" ? c : Number(String(c).replace(/[,₩원\s]/g, ""));
+    if (Number.isFinite(n) && n >= 0) return Math.floor(n);
+  }
+  return 0;
 }
 
 function sanitizeEmployee(
@@ -37,6 +52,7 @@ function sanitizeEmployee(
     jobTrack: rest.jobTrack ?? "",
     gender: rest.gender ?? "",
     titleYears: parseStoredTitleYears(asRec),
+    salary: parseStoredSalary(asRec),
     groupHireDate: rest.groupHireDate ?? "",
     hireDate: rest.hireDate ?? "",
   };
@@ -49,7 +65,7 @@ function loadEmployees(): EmployeeRosterRecord[] {
     if (!raw) return seedEmployeeRoster();
     const parsed = JSON.parse(raw) as EmployeeRosterRecord[];
     if (!Array.isArray(parsed)) return seedEmployeeRoster();
-    const cleaned = parsed.map(sanitizeEmployee);
+    let cleaned = parsed.map(sanitizeEmployee);
     const needsRewrite = parsed.some((e) => {
       if (!e || typeof e !== "object") return true;
       const rec = e as EmployeeRosterRecord & { birthDate?: string };
@@ -57,9 +73,26 @@ function loadEmployees(): EmployeeRosterRecord[] {
         "birthDate" in rec ||
         typeof rec.part !== "string" ||
         typeof rec.titleYears !== "number" ||
-        !Number.isFinite(rec.titleYears)
+        !Number.isFinite(rec.titleYears) ||
+        typeof rec.salary !== "number" ||
+        !Number.isFinite(rec.salary)
       );
     });
+
+    const shouldImportSalary =
+      window.localStorage.getItem(EMPLOYEE_SALARY_IMPORT_FLAG) !== "1";
+    if (shouldImportSalary) {
+      const applied = applySalaryByName(cleaned);
+      cleaned = applied.items;
+      window.localStorage.setItem(EMPLOYEE_SALARY_IMPORT_FLAG, "1");
+      window.localStorage.setItem(
+        EMPLOYEES_STORAGE_KEY,
+        JSON.stringify(cleaned),
+      );
+      notifyEmployeesUpdated();
+      return cleaned;
+    }
+
     if (needsRewrite) {
       window.localStorage.setItem(
         EMPLOYEES_STORAGE_KEY,
