@@ -95,7 +95,8 @@ export function HrDashboardView() {
     let dirty = false;
 
     const flag2027 = "hr-dashboard-hours-propagate-2027-01-full-v3";
-    const flag2026 = "hr-dashboard-hours-copy-2026-11-to-09-10-v1";
+    const flag2026Nov = "hr-dashboard-hours-copy-2026-11-to-09-10-v1";
+    const flag2026Jan = "hr-dashboard-hours-copy-2026-01-to-02-08-v1";
 
     try {
       if (
@@ -115,7 +116,7 @@ export function HrDashboardView() {
       }
 
       if (
-        window.localStorage.getItem(flag2026) !== "1" &&
+        window.localStorage.getItem(flag2026Nov) !== "1" &&
         items.some((r) => r.yearMonth === "2026-11")
       ) {
         const res = copyPlanToMonths(items, "2026-11", [
@@ -124,7 +125,25 @@ export function HrDashboardView() {
         ]);
         items = res.items;
         if (res.changed > 0) dirty = true;
-        window.localStorage.setItem(flag2026, "1");
+        window.localStorage.setItem(flag2026Nov, "1");
+      }
+
+      if (
+        window.localStorage.getItem(flag2026Jan) !== "1" &&
+        items.some((r) => r.yearMonth === "2026-01")
+      ) {
+        const res = copyPlanToMonths(items, "2026-01", [
+          "2026-02",
+          "2026-03",
+          "2026-04",
+          "2026-05",
+          "2026-06",
+          "2026-07",
+          "2026-08",
+        ]);
+        items = res.items;
+        if (res.changed > 0) dirty = true;
+        window.localStorage.setItem(flag2026Jan, "1");
       }
     } catch {
       /* ignore */

@@ -186,8 +186,8 @@ function consolidateMonthRows(
 }
 
 /**
- * 소스 월의 계획을 지정한 월들에 복사. 대상 월 실적은 유지(없으면 0).
- * 소스 월 중복 행은 합산 후 반영합니다.
+ * 소스 월의 계획을 지정한 월들에 복사.
+ * 대상 월에 이미 있는 실적(및 세부 실적)은 반드시 유지합니다.
  */
 export function copyPlanToMonths(
   items: TeamPeriodMetric[],
@@ -207,35 +207,81 @@ export function copyPlanToMonths(
   const sources = consolidated.filter((r) => r.yearMonth === sourceYearMonth);
   if (!sources.length) return { items, changed: 0 };
 
-  // 대상 월 기존 행 제거 후 재생성
+  // 대상 월 기존 실적 보존용 맵 (팀·파트 키)
+  const existingActual = new Map<string, TeamPeriodMetric>();
+  for (const r of consolidated) {
+    if (!targets.includes(r.yearMonth)) continue;
+    const key = rowKey(r);
+    const prev = existingActual.get(key);
+    if (!prev) {
+      existingActual.set(key, r);
+      continue;
+    }
+    // 중복이면 실적 합산
+    if (r.hourDetails || prev.hourDetails) {
+      const hourDetails = emptyWorkHourDetails();
+      const a = prev.hourDetails ?? emptyWorkHourDetails();
+      const b = r.hourDetails ?? emptyWorkHourDetails();
+      for (const k of WORK_HOUR_DETAIL_KEYS) {
+        hourDetails[k] = {
+          plan: Number(a[k]?.plan) || 0,
+          actual:
+            (Number(a[k]?.actual) || 0) + (Number(b[k]?.actual) || 0),
+        };
+      }
+      existingActual.set(
+        key,
+        withHourTotals({
+          ...prev,
+          actual: (Number(prev.actual) || 0) + (Number(r.actual) || 0),
+          hourDetails,
+        }),
+      );
+    } else {
+      existingActual.set(key, {
+        ...prev,
+        actual: (Number(prev.actual) || 0) + (Number(r.actual) || 0),
+      });
+    }
+  }
+
   const next = consolidated.filter((r) => !targets.includes(r.yearMonth));
   let changed = 0;
 
   for (const ym of targets) {
     for (const src of sources) {
-      const hourDetails = src.hourDetails
-        ? (() => {
-            const d = emptyWorkHourDetails();
-            const s = src.hourDetails!;
-            for (const key of WORK_HOUR_DETAIL_KEYS) {
-              d[key] = {
-                plan: Number(s[key]?.plan) || 0,
-                actual: 0,
-              };
-            }
-            return d;
-          })()
-        : undefined;
+      const key = `${ym}|${src.team}|${(src.part ?? "").trim()}`;
+      const existing = existingActual.get(key);
+      const exDetails = existing?.hourDetails;
+
+      let hourDetails: WorkHourDetails | undefined;
+      if (src.hourDetails) {
+        const d = emptyWorkHourDetails();
+        const s = src.hourDetails;
+        const ex = exDetails ?? emptyWorkHourDetails();
+        for (const k of WORK_HOUR_DETAIL_KEYS) {
+          d[k] = {
+            plan: Number(s[k]?.plan) || 0,
+            actual: Number(ex[k]?.actual) || 0,
+          };
+        }
+        hourDetails = d;
+      }
+
       next.push(
         withHourTotals({
-          id: `tpm-copy-${ym}-${src.team}-${src.part || "all"}`,
+          id:
+            existing?.id ??
+            `tpm-copy-${ym}-${src.team}-${src.part || "all"}`,
           yearMonth: ym,
           team: src.team,
           part: src.part,
           plan: src.hourDetails
             ? sumWorkHourDetails(hourDetails).plan
             : src.plan,
-          actual: 0,
+          actual: hourDetails
+            ? sumWorkHourDetails(hourDetails).actual
+            : Number(existing?.actual) || 0,
           hourDetails,
         }),
       );
@@ -243,7 +289,6 @@ export function copyPlanToMonths(
     }
   }
 
-  // 소스 월도 합산본으로 정리
   const withoutSource = next.filter((r) => r.yearMonth !== sourceYearMonth);
   return {
     items: [...withoutSource, ...sources.map((s) => withHourTotals({ ...s }))],

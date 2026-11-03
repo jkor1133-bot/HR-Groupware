@@ -589,6 +589,9 @@ export function TeamPeriodMetricsEditor({
         window.localStorage.removeItem(
           "hr-dashboard-hours-propagate-2027-01-full-v3",
         );
+        window.localStorage.removeItem(
+          "hr-dashboard-hours-copy-2026-01-to-02-08-v1",
+        );
       } catch {
         /* ignore */
       }
