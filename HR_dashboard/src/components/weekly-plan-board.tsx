@@ -228,36 +228,74 @@ export function WeeklyPlanBoard() {
         </div>
       </div>
 
-      <div className="grid gap-3 @md/app:grid-cols-2 @5xl/app:grid-cols-4">
-        {[
-          { label: "전체 업무", value: summary.total, tone: "bg-white" },
-          { label: "예정", value: summary.planned, tone: "bg-[#eef7fc]" },
-          {
-            label: "진행 중",
-            value: summary.inProgress,
-            tone: "bg-[#e8f1f9]",
-          },
-          { label: "지연", value: summary.delayed, tone: "bg-[#fceeee]" },
-        ].map((item) => (
-          <Card
-            key={item.label}
-            className={cn("border-border shadow-sm", item.tone)}
-          >
-            <CardHeader className="pb-2">
-              <CardDescription className="text-muted-foreground">
-                {item.label}
-              </CardDescription>
-              <CardTitle className="font-heading text-3xl tabular-nums text-dh-deep">
-                {item.value}
-              </CardTitle>
-            </CardHeader>
-            {item.label === "전체 업무" ? (
-              <CardContent className="pt-0 text-xs text-muted-foreground">
-                완료 {summary.done}건 포함
-              </CardContent>
-            ) : null}
-          </Card>
-        ))}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {(
+          [
+            {
+              key: "all" as const,
+              label: "전체 업무",
+              value: summary.total,
+              tone: "bg-white",
+              active:
+                "border-dh-sea bg-dh-sky/20 ring-1 ring-dh-sea/30",
+            },
+            {
+              key: "planned" as const,
+              label: "예정",
+              value: summary.planned,
+              tone: "bg-slate-100",
+              active:
+                "border-slate-400 bg-slate-200 ring-1 ring-slate-400/40",
+            },
+            {
+              key: "in_progress" as const,
+              label: "진행 중",
+              value: summary.inProgress,
+              tone: "bg-amber-50",
+              active:
+                "border-amber-400 bg-amber-100 ring-1 ring-amber-400/40",
+            },
+            {
+              key: "done" as const,
+              label: "완료",
+              value: summary.done,
+              tone: "bg-emerald-50",
+              active:
+                "border-emerald-500 bg-emerald-100 ring-1 ring-emerald-500/30",
+            },
+            {
+              key: "delayed" as const,
+              label: "지연",
+              value: summary.delayed,
+              tone: "bg-[#fceeee]",
+              active:
+                "border-dh-red bg-[#f8dede] ring-1 ring-dh-red/30",
+            },
+          ] as const
+        ).map((item) => {
+          const active = statusFilter === item.key;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setStatusFilter(item.key)}
+              aria-pressed={active}
+              title={`${item.label} 보기`}
+              className={cn(
+                "rounded-xl border text-center shadow-sm transition",
+                active ? item.active : cn("border-border", item.tone),
+                !active && "hover:brightness-[0.98]",
+              )}
+            >
+              <div className="px-4 py-4">
+                <p className="text-sm text-muted-foreground">{item.label}</p>
+                <p className="mt-1 font-heading text-3xl font-semibold tabular-nums text-dh-deep">
+                  {item.value}
+                </p>
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       <Card className="border-border shadow-sm">
@@ -268,8 +306,8 @@ export function WeeklyPlanBoard() {
             </CardTitle>
             <CardDescription>
               {canManageAll
-                ? "담당자·상태별로 필터하고, 새 업무를 추가해 보세요."
-                : "내 업무만 표시됩니다. 상태 필터로 진행 상황을 확인할 수 있습니다."}
+                ? "위 상태 카드로 필터하고, 담당자별·업무 추가를 이용하세요."
+                : "위 상태 카드로 내 업무를 필터할 수 있습니다."}
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -292,24 +330,6 @@ export function WeeklyPlanBoard() {
               </Select>
             ) : null}
 
-            <Select
-              value={statusFilter}
-              onValueChange={(v) =>
-                setStatusFilter((v as FilterStatus) ?? "all")
-              }
-            >
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="상태" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">전체 상태</SelectItem>
-                <SelectItem value="planned">예정</SelectItem>
-                <SelectItem value="in_progress">진행 중</SelectItem>
-                <SelectItem value="done">완료</SelectItem>
-                <SelectItem value="delayed">지연</SelectItem>
-              </SelectContent>
-            </Select>
-
             <Button onClick={openCreate} disabled={!selfId}>
               <Plus data-icon="inline-start" />
               업무 추가
@@ -320,13 +340,32 @@ export function WeeklyPlanBoard() {
         <CardContent className="p-0">
           {weekTasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-              <p className="font-heading text-lg text-dh-deep">
-                이 주에는 등록된 업무가 없습니다
-              </p>
-              <p className="max-w-sm text-sm text-muted-foreground">
-                주간업무계획을 추가하거나, 지난주·다음주로 이동해 보세요.
-              </p>
-              <Button onClick={openCreate}>첫 업무 추가하기</Button>
+              {summary.total > 0 && statusFilter !== "all" ? (
+                <>
+                  <p className="font-heading text-lg text-dh-deep">
+                    선택한 상태의 업무가 없습니다
+                  </p>
+                  <p className="max-w-sm text-sm text-muted-foreground">
+                    위 「전체 업무」를 누르면 전체 목록을 볼 수 있습니다.
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => setStatusFilter("all")}
+                  >
+                    전체 업무 보기
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className="font-heading text-lg text-dh-deep">
+                    이 주에는 등록된 업무가 없습니다
+                  </p>
+                  <p className="max-w-sm text-sm text-muted-foreground">
+                    주간업무계획을 추가하거나, 지난주·다음주로 이동해 보세요.
+                  </p>
+                  <Button onClick={openCreate}>첫 업무 추가하기</Button>
+                </>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">

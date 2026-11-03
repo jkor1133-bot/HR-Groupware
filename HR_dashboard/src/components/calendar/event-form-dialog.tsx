@@ -41,6 +41,55 @@ export const EVENT_COLORS = [
   "#6c757d",
 ] as const;
 
+/** 24시간제 선택 (예: 13:00). 브라우저 기본 오전/오후 1시 표시 대신 사용 */
+export const TIME_OPTIONS = Array.from({ length: 24 * 2 }, (_, i) => {
+  const h = Math.floor(i / 2);
+  const m = i % 2 === 0 ? "00" : "30";
+  return `${String(h).padStart(2, "0")}:${m}`;
+});
+
+function formatTimeLabel(hhmm: string) {
+  const [hs, ms] = hhmm.split(":");
+  const h = Number(hs);
+  const m = Number(ms);
+  if (!Number.isFinite(h)) return hhmm;
+  if (!m) return `${h}시`;
+  return `${h}시 ${String(m).padStart(2, "0")}분`;
+}
+
+function TimeSelect({
+  value,
+  onChange,
+  "aria-label": ariaLabel,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  "aria-label"?: string;
+}) {
+  const normalized = TIME_OPTIONS.includes(value)
+    ? value
+    : TIME_OPTIONS.find((t) => t.startsWith(value.slice(0, 2))) ?? value;
+  const options =
+    TIME_OPTIONS.includes(normalized) || !normalized
+      ? TIME_OPTIONS
+      : [normalized, ...TIME_OPTIONS];
+
+  return (
+    <select
+      aria-label={ariaLabel}
+      className="h-8 w-full rounded-md border border-border bg-background px-2 text-center text-sm"
+      value={normalized}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {options.map((t) => (
+        <option key={t} value={t}>
+          {formatTimeLabel(t)}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export const REMINDER_OPTIONS = [
   "없음",
   "정시",
@@ -265,12 +314,10 @@ export function EventFormDialog({
                 }}
               />
               {!form.allDay ? (
-                <Input
-                  type="time"
+                <TimeSelect
+                  aria-label="시작 시각"
                   value={form.startTime}
-                  onChange={(e) =>
-                    onChange({ ...form, startTime: e.target.value })
-                  }
+                  onChange={(startTime) => onChange({ ...form, startTime })}
                 />
               ) : (
                 <div className="hidden sm:block" />
@@ -284,12 +331,10 @@ export function EventFormDialog({
                 }
               />
               {!form.allDay ? (
-                <Input
-                  type="time"
+                <TimeSelect
+                  aria-label="종료 시각"
                   value={form.endTime}
-                  onChange={(e) =>
-                    onChange({ ...form, endTime: e.target.value })
-                  }
+                  onChange={(endTime) => onChange({ ...form, endTime })}
                 />
               ) : null}
             </div>

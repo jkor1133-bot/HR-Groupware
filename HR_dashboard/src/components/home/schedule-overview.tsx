@@ -31,7 +31,7 @@ import {
 } from "@/lib/week";
 import { cn } from "@/lib/utils";
 
-type RangeMode = "day" | "week" | "month";
+type RangeMode = "day" | "week" | "month" | "owner";
 
 function taskDate(task: WeeklyTask): string | null {
   if (task.dueDate) return task.dueDate;
@@ -46,6 +46,7 @@ function taskDate(task: WeeklyTask): string | null {
 export function ScheduleOverview() {
   const { hydrated, tasks, members, upsertTask } = useWeeklyPlans();
   const [mode, setMode] = useState<RangeMode>("week");
+  const [ownerId, setOwnerId] = useState<string>("all");
   const [anchor, setAnchor] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -65,14 +66,18 @@ export function ScheduleOverview() {
     if (mode === "day") {
       return { start: anchor, end: anchor, label: `${anchor} (일 단위)` };
     }
-    if (mode === "week") {
+    // 주 단위 · 담당자별: 해당 주(월~금) 기준
+    if (mode === "week" || mode === "owner") {
       const monday = getMonday(d);
       const friday = addDays(monday, 4);
       const weekId = weekIdFromDate(d);
       return {
         start: formatYmd(monday),
         end: formatYmd(friday),
-        label: weekLabel(weekId),
+        label:
+          mode === "owner"
+            ? `${weekLabel(weekId)} · 담당자별`
+            : weekLabel(weekId),
       };
     }
     const start = new Date(d.getFullYear(), d.getMonth(), 1);
@@ -85,7 +90,7 @@ export function ScheduleOverview() {
   }, [anchor, mode]);
 
   const visible = useMemo(() => {
-    return tasks
+    const rows = tasks
       .map((t) => ({ task: t, date: taskDate(t) }))
       .filter(
         (x) =>
@@ -93,15 +98,31 @@ export function ScheduleOverview() {
           x.date >= range.start &&
           x.date <= range.end,
       )
-      .sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
-  }, [tasks, range.start, range.end]);
+      .filter((x) =>
+        mode === "owner" && ownerId !== "all"
+          ? x.task.ownerId === ownerId
+          : true,
+      );
+
+    if (mode === "owner") {
+      return rows.sort((a, b) => {
+        const na = memberMap[a.task.ownerId]?.name ?? "미지정";
+        const nb = memberMap[b.task.ownerId]?.name ?? "미지정";
+        const byOwner = na.localeCompare(nb, "ko");
+        if (byOwner !== 0) return byOwner;
+        return (a.date ?? "").localeCompare(b.date ?? "");
+      });
+    }
+
+    return rows.sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
+  }, [tasks, range.start, range.end, mode, ownerId, memberMap]);
 
   function shift(dir: -1 | 1) {
     if (!anchor) return;
     const d = new Date(`${anchor}T00:00:00`);
     if (mode === "day") {
       setAnchor(formatYmd(addDays(d, dir)));
-    } else if (mode === "week") {
+    } else if (mode === "week" || mode === "owner") {
       setAnchor(formatYmd(addDays(d, dir * 7)));
     } else {
       setAnchor(formatYmd(new Date(d.getFullYear(), d.getMonth() + dir, 1)));
@@ -192,16 +213,17 @@ export function ScheduleOverview() {
             주간업무계획
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            일·주·월 조회 · 웹 등록/수정 · 엑셀·구글시트(xlsx/csv) 연동
+            일·주·월·담당자별 조회 · 웹 등록/수정 · 엑셀 연동
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex rounded-lg bg-muted p-1">
             {(
               [
-                ["day", "일"],
-                ["week", "주"],
-                ["month", "월"],
+                ["day", "일 단위"],
+                ["week", "주 단위"],
+                ["month", "월 단위"],
+                ["owner", "담당자별"],
               ] as const
             ).map(([value, label]) => (
               <button
@@ -209,16 +231,32 @@ export function ScheduleOverview() {
                 type="button"
                 onClick={() => setMode(value)}
                 className={cn(
-                  "rounded-md px-3 py-1 text-xs font-medium transition",
+                  "rounded-md px-3 py-1 text-center text-xs font-medium transition",
                   mode === value
                     ? "bg-dh-real text-white shadow-sm"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                {label} 단위
+                {label}
               </button>
             ))}
           </div>
+          {mode === "owner" ? (
+            <select
+              className="h-8 rounded-md border border-border bg-background px-2 text-center text-xs"
+              value={ownerId}
+              onChange={(e) => setOwnerId(e.target.value)}
+              aria-label="담당자 선택"
+            >
+              <option value="all">전체 담당자</option>
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                  {m.role ? ` ${m.role}` : ""}
+                </option>
+              ))}
+            </select>
+          ) : null}
           <div className="flex items-center gap-1">
             <Button variant="outline" size="sm" onClick={() => shift(-1)}>
               <ChevronLeft />
@@ -297,8 +335,25 @@ export function ScheduleOverview() {
                 const bottleneck =
                   task.subtasks?.filter((s) => s.status === "delayed").length ??
                   0;
+                const ownerName = owner?.name ?? "미지정";
+                const prevOwnerId = i > 0 ? visible[i - 1]?.task.ownerId : null;
+                const showOwnerGroup =
+                  mode === "owner" &&
+                  ownerId === "all" &&
+                  (i === 0 || prevOwnerId !== task.ownerId);
                 return (
                   <Fragment key={task.id}>
+                    {showOwnerGroup ? (
+                      <tr className="border-t border-border bg-dh-sky/10">
+                        <td
+                          colSpan={5}
+                          className="px-4 py-2 text-center text-xs font-semibold text-dh-deep sm:px-5"
+                        >
+                          {ownerName}
+                          {owner?.role ? ` · ${owner.role}` : ""}
+                        </td>
+                      </tr>
+                    ) : null}
                     <tr
                       className={cn(
                         "border-t border-border/70",

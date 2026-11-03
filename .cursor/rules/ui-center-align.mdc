@@ -1,0 +1,12 @@
+---
+description: 표·탭·칸 UI는 기본 가운데 정렬
+globs: HR_dashboard/src/**/*.{tsx,css}
+alwaysApply: false
+---
+
+# UI 기본 정렬
+
+- 표(`gw-data-table`, `Table`), 탭, 칸 안 입력/선택은 **기본 가운데 정렬** (`text-center`, `align-middle`).
+- 긴 문장(업무 제목·설명·본문)만 `text-left` 또는 `gw-align-start`로 예외.
+- 새 메뉴·탭·표 추가 시 왼쪽 정렬을 기본으로 두지 말 것.
+- 날짜 입력(`type="date"`)도 `text-center` 유지.

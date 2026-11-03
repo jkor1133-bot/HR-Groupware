@@ -35,6 +35,7 @@ const STATUS_ORDER: TaskStatus[] = [
 export function WeeklyProgressPanel() {
   const { hydrated, tasks, members } = useWeeklyPlans();
   const [today, setToday] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<TaskStatus | null>(null);
 
   useEffect(() => {
     setToday(formatYmd(new Date()));
@@ -88,6 +89,22 @@ export function WeeklyProgressPanel() {
     return { counts, total, doneRate };
   }, [weekTasks]);
 
+  const filteredTasks = useMemo(() => {
+    if (!statusFilter) return weekTasks;
+    return weekTasks.filter((t) => t.status === statusFilter);
+  }, [weekTasks, statusFilter]);
+
+  const filterLabel =
+    statusFilter === "delayed"
+      ? "지연"
+      : statusFilter === "in_progress"
+        ? "진행"
+        : statusFilter === "planned"
+          ? "예정"
+          : statusFilter === "done"
+            ? "완료"
+            : null;
+
   return (
     <section className="flex h-full min-h-[32rem] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm @lg/app:min-h-[36rem]">
       <div className="flex shrink-0 flex-wrap items-start justify-between gap-2 border-b border-border px-4 py-3 sm:px-5">
@@ -115,29 +132,83 @@ export function WeeklyProgressPanel() {
         </p>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
             {(
               [
-                ["delayed", "지연"],
-                ["in_progress", "진행"],
-                ["planned", "예정"],
-                ["done", "완료"],
+                {
+                  key: null,
+                  label: "전체",
+                  value: summary.total,
+                  tone: "bg-white",
+                  active:
+                    "border-dh-sea bg-dh-sky/20 ring-1 ring-dh-sea/30",
+                },
+                {
+                  key: "planned" as const,
+                  label: "예정",
+                  value: summary.counts.planned,
+                  tone: "bg-slate-100",
+                  active:
+                    "border-slate-400 bg-slate-200 ring-1 ring-slate-400/40",
+                },
+                {
+                  key: "in_progress" as const,
+                  label: "진행",
+                  value: summary.counts.in_progress,
+                  tone: "bg-amber-50",
+                  active:
+                    "border-amber-400 bg-amber-100 ring-1 ring-amber-400/40",
+                },
+                {
+                  key: "done" as const,
+                  label: "완료",
+                  value: summary.counts.done,
+                  tone: "bg-emerald-50",
+                  active:
+                    "border-emerald-500 bg-emerald-100 ring-1 ring-emerald-500/30",
+                },
+                {
+                  key: "delayed" as const,
+                  label: "지연",
+                  value: summary.counts.delayed,
+                  tone: "bg-[#fceeee]",
+                  active:
+                    "border-dh-red bg-[#f8dede] ring-1 ring-dh-red/30",
+                },
               ] as const
-            ).map(([key, label]) => (
-              <div
-                key={key}
-                className="rounded-lg border border-border bg-muted/30 px-2.5 py-2"
-              >
-                <p className="text-[11px] text-muted-foreground">{label}</p>
-                <p className="font-heading text-lg font-semibold tabular-nums text-dh-deep dark:text-dh-light">
-                  {summary.counts[key]}
-                </p>
-              </div>
-            ))}
+            ).map((item) => {
+              const active = statusFilter === item.key;
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => setStatusFilter(item.key)}
+                  aria-pressed={active}
+                  title={`${item.label} 업무 보기`}
+                  className={cn(
+                    "rounded-xl border px-2.5 py-3 text-center shadow-sm transition",
+                    active
+                      ? item.active
+                      : cn("border-border", item.tone, "hover:brightness-[0.98]"),
+                  )}
+                >
+                  <p className="text-[11px] text-muted-foreground">
+                    {item.label}
+                  </p>
+                  <p className="mt-0.5 font-heading text-xl font-semibold tabular-nums text-dh-deep dark:text-dh-light">
+                    {item.value}
+                  </p>
+                </button>
+              );
+            })}
           </div>
 
           <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-            <span>총 {summary.total}건</span>
+            <span>
+              {filterLabel
+                ? `${filterLabel} ${filteredTasks.length}건`
+                : `총 ${summary.total}건`}
+            </span>
             <span className="font-medium text-foreground">
               완료율 {summary.doneRate}%
             </span>
@@ -154,8 +225,13 @@ export function WeeklyProgressPanel() {
               <li className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
                 이번 주 등록된 업무가 없습니다.
               </li>
+            ) : filteredTasks.length === 0 ? (
+              <li className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+                {filterLabel} 상태 업무가 없습니다. 카드를 다시 누르면 전체
+                목록으로 돌아갑니다.
+              </li>
             ) : (
-              weekTasks.map((t) => (
+              filteredTasks.map((t) => (
                 <li
                   key={t.id}
                   className={cn(

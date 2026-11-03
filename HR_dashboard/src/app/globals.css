@@ -198,29 +198,73 @@
   }
 }
 
-/* 데이터 표: 짧은 칸 가운데 정렬 (긴 텍스트 칸은 text-left로 예외) */
+/*
+ * 기본 배치: 표·탭·칸 안 입력은 가운데 정렬.
+ * 긴 문장(제목·설명 등)만 text-left / gw-align-start 로 예외.
+ */
 @layer components {
-  table.gw-data-table {
+  table.gw-data-table,
+  table[data-slot="table"] {
     text-align: center;
   }
   table.gw-data-table th,
-  table.gw-data-table td {
+  table.gw-data-table td,
+  table[data-slot="table"] th,
+  table[data-slot="table"] td {
     text-align: center;
     vertical-align: middle;
   }
   table.gw-data-table th.text-left,
-  table.gw-data-table td.text-left {
+  table.gw-data-table td.text-left,
+  table.gw-data-table th.gw-align-start,
+  table.gw-data-table td.gw-align-start,
+  table[data-slot="table"] th.text-left,
+  table[data-slot="table"] td.text-left,
+  table[data-slot="table"] th.gw-align-start,
+  table[data-slot="table"] td.gw-align-start {
     text-align: left;
   }
   table.gw-data-table td input:not([type="checkbox"]),
-  table.gw-data-table td select {
+  table.gw-data-table td select,
+  table.gw-data-table td textarea,
+  table[data-slot="table"] td input:not([type="checkbox"]),
+  table[data-slot="table"] td select,
+  table[data-slot="table"] td textarea {
     margin-inline: auto;
     text-align: center;
   }
+  table.gw-data-table td input[type="date"],
+  table[data-slot="table"] td input[type="date"] {
+    text-align: center;
+  }
+  table.gw-data-table td input[type="date"]::-webkit-datetime-edit,
+  table[data-slot="table"] td input[type="date"]::-webkit-datetime-edit {
+    width: 100%;
+    display: inline-flex;
+    justify-content: center;
+    text-align: center;
+  }
   table.gw-data-table td.text-left input:not([type="checkbox"]),
-  table.gw-data-table td.text-left select {
+  table.gw-data-table td.text-left select,
+  table.gw-data-table td.text-left textarea,
+  table.gw-data-table td.gw-align-start input:not([type="checkbox"]),
+  table.gw-data-table td.gw-align-start select,
+  table.gw-data-table td.gw-align-start textarea,
+  table[data-slot="table"] td.text-left input:not([type="checkbox"]),
+  table[data-slot="table"] td.text-left select,
+  table[data-slot="table"] td.text-left textarea,
+  table[data-slot="table"] td.gw-align-start input:not([type="checkbox"]),
+  table[data-slot="table"] td.gw-align-start select,
+  table[data-slot="table"] td.gw-align-start textarea {
     margin-inline: 0;
     text-align: left;
+  }
+
+  [data-slot="tabs-list"],
+  [data-slot="tabs-trigger"],
+  .gw-tab-list,
+  .gw-tab {
+    text-align: center;
   }
 }
 

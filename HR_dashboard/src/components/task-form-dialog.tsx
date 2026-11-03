@@ -30,6 +30,10 @@ import type {
   WeeklySubTask,
   WeeklyTask,
 } from "@/lib/types";
+import {
+  deriveTaskStatusFromSubtasks,
+  normalizeWeeklySubTask,
+} from "@/lib/weekly-calendar";
 import { addDays, formatYmd, weekIdFromDate } from "@/lib/week";
 
 type Props = {
@@ -92,6 +96,8 @@ function emptySubtask(): WeeklySubTask {
     title: "",
     ownerLabel: "",
     status: "planned",
+    startDate: "",
+    endDate: "",
     dueLabel: "",
     delayReason: "",
   };
@@ -149,7 +155,9 @@ export function TaskFormDialog({
         startDate: start,
         endDate: end,
         category: initial.category,
-        subtasks: (initial.subtasks ?? []).map((s) => ({ ...s })),
+        subtasks: (initial.subtasks ?? []).map((s) =>
+          normalizeWeeklySubTask({ ...s }),
+        ),
       });
     } else {
       setForm(emptyForm(members, weekId, lockedOwnerId));
@@ -199,7 +207,7 @@ export function TaskFormDialog({
       ...f,
       subtasks: f.subtasks.map((s, i) => {
         if (i !== idx) return s;
-        const merged = { ...s, ...patch };
+        const merged = normalizeWeeklySubTask({ ...s, ...patch });
         if (merged.status !== "delayed") merged.delayReason = "";
         return merged;
       }),
@@ -231,12 +239,16 @@ export function TaskFormDialog({
 
     const subtasks = form.subtasks
       .filter((s) => s.title.trim())
-      .map((s) => ({
-        ...s,
-        title: s.title.trim(),
-        ownerLabel: s.ownerLabel.trim(),
-        delayReason: s.status === "delayed" ? s.delayReason.trim() : "",
-      }));
+      .map((s) => {
+        const norm = normalizeWeeklySubTask(s);
+        return {
+          ...norm,
+          title: norm.title.trim(),
+          ownerLabel: norm.ownerLabel.trim(),
+          delayReason:
+            norm.status === "delayed" ? norm.delayReason.trim() : "",
+        };
+      });
 
     const anchor = startDate || endDate;
     const resolvedWeekId = anchor
@@ -249,7 +261,7 @@ export function TaskFormDialog({
       ownerId,
       title: form.title.trim(),
       description: form.description.trim(),
-      status: form.status,
+      status: deriveTaskStatusFromSubtasks(form.status, subtasks),
       priority: form.priority,
       dueDay,
       dueDate: endDate || startDate,
@@ -462,8 +474,8 @@ export function TaskFormDialog({
                 <div>
                   <Label>세부업무</Label>
                   <p className="text-[11px] text-muted-foreground">
-                    등록과 동시에 단계를 나눠 둘 수 있습니다. 기한은
-                    Calendar에 「주간업무」로 표시됩니다.
+                    등록과 동시에 단계를 나눠 둘 수 있습니다. Calendar에는
+                    본업무 기간만 「주간업무」로 표시됩니다.
                   </p>
                 </div>
                 <Button
@@ -521,15 +533,26 @@ export function TaskFormDialog({
                           <Trash2 className="size-3.5" />
                         </Button>
                       </div>
-                      <div className="grid grid-cols-3 gap-2 pl-8">
-                        <Input
-                          placeholder="담당자"
+                      <div className="grid grid-cols-2 gap-2 pl-8 sm:grid-cols-4">
+                        <select
+                          className="h-8 rounded-md border border-border bg-background px-2 text-xs"
                           value={s.ownerLabel}
-                          className="h-8"
                           onChange={(e) =>
                             updateSub(idx, { ownerLabel: e.target.value })
                           }
-                        />
+                        >
+                          <option value="">담당자 선택</option>
+                          {Array.from(
+                            new Set([
+                              ...members.map((m) => m.name),
+                              ...(s.ownerLabel ? [s.ownerLabel] : []),
+                            ]),
+                          ).map((name) => (
+                            <option key={name} value={name}>
+                              {name}
+                            </option>
+                          ))}
+                        </select>
                         <select
                           className="h-8 rounded-md border border-border bg-background px-2 text-xs"
                           value={s.status}
@@ -547,18 +570,63 @@ export function TaskFormDialog({
                             </option>
                           ))}
                         </select>
-                        <Input
-                          type="date"
-                          value={
-                            /^\d{4}-\d{2}-\d{2}$/.test(s.dueLabel.trim())
-                              ? s.dueLabel.trim()
-                              : ""
-                          }
-                          className="h-8"
-                          onChange={(e) =>
-                            updateSub(idx, { dueLabel: e.target.value })
-                          }
-                        />
+                        <label className="grid gap-0.5">
+                          <span className="text-[10px] text-muted-foreground">
+                            시작일
+                          </span>
+                          <Input
+                            type="date"
+                            value={
+                              /^\d{4}-\d{2}-\d{2}$/.test(s.startDate?.trim() ?? "")
+                                ? s.startDate.trim()
+                                : ""
+                            }
+                            className="h-8"
+                            onChange={(e) => {
+                              const startDate = e.target.value;
+                              updateSub(idx, {
+                                startDate,
+                                endDate:
+                                  s.endDate &&
+                                  startDate &&
+                                  s.endDate < startDate
+                                    ? startDate
+                                    : s.endDate,
+                              });
+                            }}
+                          />
+                        </label>
+                        <label className="grid gap-0.5">
+                          <span className="text-[10px] text-muted-foreground">
+                            마감일
+                          </span>
+                          <Input
+                            type="date"
+                            value={
+                              /^\d{4}-\d{2}-\d{2}$/.test(s.endDate?.trim() ?? "")
+                                ? s.endDate.trim()
+                                : /^\d{4}-\d{2}-\d{2}$/.test(
+                                      s.dueLabel?.trim() ?? "",
+                                    )
+                                  ? (s.dueLabel ?? "").trim()
+                                  : ""
+                            }
+                            className="h-8"
+                            onChange={(e) => {
+                              const endDate = e.target.value;
+                              updateSub(idx, {
+                                endDate,
+                                dueLabel: endDate,
+                                startDate:
+                                  s.startDate &&
+                                  endDate &&
+                                  endDate < s.startDate
+                                    ? endDate
+                                    : s.startDate,
+                              });
+                            }}
+                          />
+                        </label>
                       </div>
                       {s.status === "delayed" ? (
                         <Input

@@ -12,6 +12,7 @@ import {
 import { buildSeedTasks } from "@/data/seed";
 import { useMembers } from "@/hooks/use-members";
 import type { WeeklyPlanBundle, WeeklyTask } from "@/lib/types";
+import { normalizeWeeklySubTask } from "@/lib/weekly-calendar";
 import { taskOverlapsWeek, weekIdFromTaskDates } from "@/lib/week";
 
 const STORAGE_KEY = "hr-dashboard-weekly-plans-v3";
@@ -23,7 +24,13 @@ function createSeedTasks(): WeeklyTask[] {
 
 function normalizeTaskWeekId(task: WeeklyTask): WeeklyTask {
   const weekId = weekIdFromTaskDates(task);
-  return weekId === task.weekId ? task : { ...task, weekId };
+  const subtasks = task.subtasks?.map(normalizeWeeklySubTask);
+  const next = {
+    ...task,
+    weekId,
+    ...(subtasks ? { subtasks } : {}),
+  };
+  return next;
 }
 
 function loadTasks(): WeeklyTask[] {

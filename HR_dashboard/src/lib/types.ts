@@ -38,8 +38,14 @@ export type WeeklySubTask = {
   /** 담당자 표시명 (팀원 id 또는 자유 텍스트, 예: 각 팀장) */
   ownerLabel: string;
   status: SubTaskStatus;
-  /** 기한: YYYY-MM-DD 또는 D-3d 형식 */
-  dueLabel: string;
+  /** 시작일 YYYY-MM-DD */
+  startDate: string;
+  /** 마감일 YYYY-MM-DD */
+  endDate: string;
+  /**
+   * @deprecated endDate 사용. 이전 데이터 호환용(마감일과 동기화)
+   */
+  dueLabel?: string;
   /** 지연 시 사유 */
   delayReason: string;
 };
