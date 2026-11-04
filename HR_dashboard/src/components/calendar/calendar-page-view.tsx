@@ -236,10 +236,11 @@ export function CalendarPageView() {
         <div>
           <h1 className="flex items-center gap-2 font-heading text-xl font-semibold text-dh-deep dark:text-dh-light">
             <CalendarDays className="size-5 text-dh-sea" />
-            Calendar
+            월간 일정표(업무)
           </h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            직접 입력 · 주간업무 기한 · 계약·인허가 종료일을 함께 표시합니다.
+            이 화면에서 등록한 일정 · 주간업무 기한 · 계약·인허가 종료일을 함께
+            표시합니다. (메인 화면 캘린더 일정은 포함하지 않습니다)
           </p>
           <div className="mt-1.5 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">

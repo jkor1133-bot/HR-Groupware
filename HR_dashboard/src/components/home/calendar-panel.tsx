@@ -56,7 +56,7 @@ function deadlineShortLabel(alert: DeadlineAlert) {
 }
 
 export function CalendarPanel() {
-  const { hydrated, eventsOn, upsert, remove, members } = useCalendar();
+  const { hydrated, eventsOn, upsert, remove, members } = useCalendar("home");
   const contracts = useLocalList(CONTRACTS_STORAGE_KEY, loadContracts);
   const permits = useLocalList(PERMITS_STORAGE_KEY, loadPermits);
   const [cursor, setCursor] = useState<Date | null>(null);

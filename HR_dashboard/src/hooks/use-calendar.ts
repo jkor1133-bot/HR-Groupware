@@ -5,7 +5,12 @@ import { useMembers } from "@/hooks/use-members";
 import type { CalendarEvent } from "@/lib/types";
 import { formatYmd } from "@/lib/week";
 
-const STORAGE_KEY = "hr-dashboard-calendar-v3";
+/** 사이드바 월간 일정표(업무) — 직접 입력 + 주간업무·계약 등과 함께 표시 */
+const PAGE_STORAGE_KEY = "hr-dashboard-calendar-v3";
+/** 메인 화면 홈 캘린더 전용 (사이드바 Calendar와 분리) */
+const HOME_STORAGE_KEY = "hr-dashboard-home-calendar-v1";
+
+export type CalendarScope = "page" | "home";
 
 function seedEvents(): CalendarEvent[] {
   const today = formatYmd(new Date());
@@ -30,6 +35,7 @@ function seedEvents(): CalendarEvent[] {
       videoLink: "",
       reminder: "10분 전",
       attachments: [],
+      source: "calendar",
     },
   ];
 }
@@ -45,42 +51,67 @@ function normalize(ev: CalendarEvent): CalendarEvent {
     videoLink: ev.videoLink ?? "",
     reminder: ev.reminder || "없음",
     attachments: Array.isArray(ev.attachments) ? ev.attachments : [],
+    source: ev.source ?? "calendar",
   };
 }
 
-function load(): CalendarEvent[] {
-  if (typeof window === "undefined") return seedEvents();
+function load(scope: CalendarScope): CalendarEvent[] {
+  if (typeof window === "undefined") {
+    return scope === "page" ? seedEvents() : [];
+  }
   try {
+    if (scope === "home") {
+      const raw = window.localStorage.getItem(HOME_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw) as CalendarEvent[];
+      return Array.isArray(parsed) ? parsed.map(normalize) : [];
+    }
+
     const raw =
-      window.localStorage.getItem(STORAGE_KEY) ||
+      window.localStorage.getItem(PAGE_STORAGE_KEY) ||
       window.localStorage.getItem("hr-dashboard-calendar-v2") ||
       window.localStorage.getItem("hr-dashboard-calendar-v1");
     if (!raw) return seedEvents();
     const parsed = JSON.parse(raw) as CalendarEvent[];
     return Array.isArray(parsed) ? parsed.map(normalize) : seedEvents();
   } catch {
-    return seedEvents();
+    return scope === "page" ? seedEvents() : [];
   }
 }
 
-export function useCalendar() {
+function storageKey(scope: CalendarScope) {
+  return scope === "home" ? HOME_STORAGE_KEY : PAGE_STORAGE_KEY;
+}
+
+/**
+ * @param scope `home` = 메인 화면 위젯 전용 저장소
+ *              `page`(기본) = 사이드바 월간 일정표
+ */
+export function useCalendar(scope: CalendarScope = "page") {
   const { members, hydrated: membersHydrated } = useMembers();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    setEvents(load());
+    setEvents(load(scope));
     setHydrated(true);
-  }, []);
+  }, [scope]);
 
-  const persist = useCallback((next: CalendarEvent[]) => {
-    setEvents(next);
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  }, []);
+  const persist = useCallback(
+    (next: CalendarEvent[]) => {
+      setEvents(next);
+      window.localStorage.setItem(storageKey(scope), JSON.stringify(next));
+    },
+    [scope],
+  );
 
   const upsert = useCallback(
     (event: CalendarEvent) => {
-      const next = normalize(event);
+      const next = normalize({
+        ...event,
+        source: scope === "home" ? "calendar" : (event.source ?? "calendar"),
+      });
+      // home 일정은 홈 저장소에만 두고, page와 id 충돌을 줄이기 위해 접두사 유지
       const exists = events.some((e) => e.id === next.id);
       persist(
         exists
@@ -88,7 +119,7 @@ export function useCalendar() {
           : [...events, next],
       );
     },
-    [events, persist],
+    [events, persist, scope],
   );
 
   const remove = useCallback(
