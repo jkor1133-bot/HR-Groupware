@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FolderKanban } from "lucide-react";
 import { ContractsDbPanel } from "@/components/hr-records/contracts-db-panel";
 import { PermitsDbPanel } from "@/components/hr-records/permits-db-panel";
+import { PromotionHistoryPanel } from "@/components/hr-records/promotion-history-panel";
 import { PromotionPointsPanel } from "@/components/hr-records/promotion-points-panel";
 import { SimpleRecordsPanel } from "@/components/hr-records/simple-records-panel";
 import { StaffMovementsPanel } from "@/components/hr-records/staff-movements-panel";
@@ -13,7 +14,6 @@ import {
   seedGolfMemberships,
   seedOverseasTrainings,
   seedPcAssignments,
-  seedPromotions,
   seedQualificationAllowances,
 } from "@/data/hr-records-seed";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -27,7 +27,6 @@ import type {
   GolfMembershipRecord,
   OverseasTrainingRecord,
   PcAssignmentRecord,
-  PromotionRecord,
   QualificationAllowanceRecord,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -111,33 +110,7 @@ function PromotionsSection() {
       ) : inner === "cumulative" ? (
         <PromotionPointsPanel mode="cumulative" />
       ) : (
-        <SimpleRecordsPanel<PromotionRecord>
-          title="승진 발령 이력"
-          description="승진 발령 건을 등록·관리합니다. 성명은 사원명부에서 선택할 수 있습니다."
-          storageKey="hr-dashboard-promotions-v2"
-          seedFn={seedPromotions}
-          idPrefix="pr"
-          excelFileName="승진발령이력.xlsx"
-          employeeLink={{ nameKey: "employeeName", teamKey: "team" }}
-          fields={[
-            {
-              key: "employeeName",
-              label: "성명",
-              type: "employee",
-              required: true,
-            },
-            { key: "team", label: "소속", required: true },
-            { key: "fromTitle", label: "승진 전", required: true },
-            { key: "toTitle", label: "승진 후", required: true },
-            {
-              key: "effectiveDate",
-              label: "발령일",
-              type: "date",
-              required: true,
-            },
-            { key: "note", label: "비고" },
-          ]}
-        />
+        <PromotionHistoryPanel />
       )}
     </div>
   );

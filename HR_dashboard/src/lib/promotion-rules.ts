@@ -21,6 +21,64 @@ export const PROMOTION_ROLES = [
   "기타",
 ] as const;
 
+/** 직책 표시·정렬 순위 (앞일수록 상위) */
+export const PROMOTION_ROLE_SORT_ORDER = [
+  "대표이사",
+  "본부장",
+  "소장",
+  "팀장",
+  "팀원",
+  "기타",
+] as const;
+
+/** 직책 순위: 대표이사(0) … 팀원 — 작을수록 상위 */
+export function toRoleRank(role: string): number {
+  const i = (PROMOTION_ROLE_SORT_ORDER as readonly string[]).indexOf(role);
+  return i >= 0 ? i : PROMOTION_ROLE_SORT_ORDER.length;
+}
+
+/** 직위 순위: 사원(0) < … < 부장 — 클수록 상위 */
+export function toTitleRank(title: string): number {
+  const i = (PROMOTION_TITLES as readonly string[]).indexOf(title);
+  return i >= 0 ? i : -1;
+}
+
+/** 직책 → 직위 → 년차(높은 순) → 성명 */
+export function comparePromotionPointOrder(
+  a: {
+    jobRole: string;
+    title: string;
+    titleYears: number;
+    name: string;
+  },
+  b: {
+    jobRole: string;
+    title: string;
+    titleYears: number;
+    name: string;
+  },
+): number {
+  const byRole = toRoleRank(a.jobRole) - toRoleRank(b.jobRole);
+  if (byRole !== 0) return byRole;
+  const byTitle = toTitleRank(b.title) - toTitleRank(a.title);
+  if (byTitle !== 0) return byTitle;
+  const byYears =
+    (Number(b.titleYears) || 0) - (Number(a.titleYears) || 0);
+  if (byYears !== 0) return byYears;
+  return (a.name || "").localeCompare(b.name || "", "ko");
+}
+
+export function sortPromotionPointRecords<
+  T extends {
+    jobRole: string;
+    title: string;
+    titleYears: number;
+    name: string;
+  },
+>(items: T[]): T[] {
+  return [...items].sort(comparePromotionPointOrder);
+}
+
 /** 등급별 승진포인트 (직위 공통) */
 export const GRADE_POINTS: Record<PromotionGrade, number> = {
   S: 100,
@@ -105,10 +163,34 @@ export function sumPromotionPoints(
   );
 }
 
+/** 입사 인정 년차 정규화 (최소 1) */
+export function normalizeHireAsYear(raw: number | undefined | null): number {
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(n, 40);
+}
+
+/**
+ * 경력직 입사 시 인정 년수.
+ * 2년차 입사 → 1년, 5년차 입사 → 4년.
+ */
+export function careerCreditYears(hireAsYear: number | undefined | null): number {
+  return Math.max(0, normalizeHireAsYear(hireAsYear) - 1);
+}
+
+/** 경력인정 포인트: 인정 년수 × B(60) */
+export function careerCreditPoints(hireAsYear: number | undefined | null): number {
+  return careerCreditYears(hireAsYear) * GRADE_POINTS.B;
+}
+
 export type EffectivePointsResult = {
-  /** 전체 연도 합계 */
+  /** 재직 중 연도 등급 합계 (경력인정 제외) */
+  servicePoints: number;
+  /** 경력인정 포인트 (입사 인정 년차−1)×B */
+  careerCredit: number;
+  /** 전체 합계 = 재직 + 경력인정 */
   gross: number;
-  /** 최근 승진 이전 연도 포인트 (차감) */
+  /** 최근 승진 이전 연도 포인트 (차감, 경력인정 포함) */
   deducted: number;
   /** 승진 이후(당해 포함) 유효 포인트 — 승진대상 판정용 */
   effective: number;
@@ -121,6 +203,7 @@ export type EffectivePointsResult = {
 /**
  * 승진 발령 이후에는 그 이전 연도 포인트를 차감합니다.
  * 예: 2023년 사원→대리 승진 → 2019~2022 포인트 차감, 2023~ 만 유효.
+ * 경력인정은 승진 이력이 없을 때만 유효 포인트에 포함(승진 후 초기화).
  */
 export function computeEffectivePoints(input: {
   title: string;
@@ -128,9 +211,13 @@ export function computeEffectivePoints(input: {
   years: number[];
   /** 해당 직원 승진 발령일 YYYY-MM-DD 목록 */
   promotionDates: string[];
+  /** 입사 인정 년차 (경력직) */
+  hireAsYear?: number;
 }): EffectivePointsResult {
-  const { title, grades, years, promotionDates } = input;
-  const gross = sumPromotionPoints(title, grades, years);
+  const { title, grades, years, promotionDates, hireAsYear } = input;
+  const servicePoints = sumPromotionPoints(title, grades, years);
+  const careerCredit = careerCreditPoints(hireAsYear);
+  const gross = servicePoints + careerCredit;
 
   const promoYears = promotionDates
     .map((d) => {
@@ -145,27 +232,37 @@ export function computeEffectivePoints(input: {
 
   if (lastPromotionYear == null) {
     return {
+      servicePoints,
+      careerCredit,
       gross,
       deducted: 0,
       effective: gross,
       lastPromotionYear: null,
-      deductDetail: "승진 발령 이력 없음 — 전 기간 포인트 합산",
+      deductDetail:
+        careerCredit > 0
+          ? `승진 발령 없음 — 재직 ${servicePoints} + 경력인정 ${careerCredit}`
+          : "승진 발령 이력 없음 — 전 기간 포인트 합산",
     };
   }
 
   const before = years.filter((y) => y < lastPromotionYear);
   const after = years.filter((y) => y >= lastPromotionYear);
-  const deducted = sumPromotionPoints(title, grades, before);
+  const deductedService = sumPromotionPoints(title, grades, before);
+  const deducted = deductedService + careerCredit;
   const effective = sumPromotionPoints(title, grades, after);
 
   return {
+    servicePoints,
+    careerCredit,
     gross,
     deducted,
     effective,
     lastPromotionYear,
     deductDetail:
       deducted > 0
-        ? `${lastPromotionYear}년 승진 반영 → ${before[0] ?? "—"}~${lastPromotionYear - 1}년 ${deducted}점 차감`
+        ? `${lastPromotionYear}년 승진 반영 → 이전 재직 ${deductedService}점` +
+          (careerCredit > 0 ? `·경력인정 ${careerCredit}점` : "") +
+          ` 차감`
         : `${lastPromotionYear}년 승진 반영 · 차감할 이전 포인트 없음`,
   };
 }
@@ -260,6 +357,19 @@ export function currentYearEligibility(input: {
           ? `당해 ${minByPoints} 이상(${GRADE_POINTS[minByPoints]}점↑)`
           : "";
 
+  /** 당해 최고점(S=100)을 받아도 필요 점수에 못 미치면 비대상 */
+  const impossibleEvenWithS = needThisYear > GRADE_POINTS.S;
+
+  if (impossibleEvenWithS) {
+    return {
+      eligible: false,
+      label: "비대상",
+      detail: `포인트 기확보 ${input.pointsBeforeCurrentYear}/${req.points} · 당해 S(${GRADE_POINTS.S})로도 부족(${needThisYear}점 필요)`,
+      minGradeThisYear: null,
+      minGradeNote,
+    };
+  }
+
   if (prevCd && current && !currentSa) {
     return {
       eligible: false,
@@ -281,15 +391,6 @@ export function currentYearEligibility(input: {
   }
 
   if (!current) {
-    if (needThisYear > GRADE_POINTS.S) {
-      return {
-        eligible: false,
-        label: "비대상",
-        detail: `포인트 기확보 ${input.pointsBeforeCurrentYear}/${req.points} · 당해 최대 100점으로도 부족`,
-        minGradeThisYear: null,
-        minGradeNote,
-      };
-    }
     if (needThisYear <= 0) {
       return {
         eligible: true,
@@ -308,12 +409,12 @@ export function currentYearEligibility(input: {
     };
   }
 
-  // 포인트 충족이 승진대상 선정의 우선 기준 (년차 미달 허용)
+  // 포인트 충족 = 대상가능(승진심사 후 확정) — 「대상」 단계는 심사에서 결정
   if (pointsOk) {
     return {
       eligible: true,
-      label: "대상",
-      detail: `${req.nextTitle} 포인트 충족 (${totalPoints}/${req.points}) · ${yearsNote} · 당해 ${current}`,
+      label: "대상가능",
+      detail: `${req.nextTitle} 포인트 충족 (${totalPoints}/${req.points}) · ${yearsNote} · 당해 ${current} · 승진심사 대기`,
       minGradeThisYear: minByPoints,
       minGradeNote: yearsOk
         ? minByPoints

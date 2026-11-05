@@ -11,6 +11,7 @@ export function seedPromotionPoints(): PromotionPointRecord[] {
       title: "대리",
       titleYears: 4,
       hireDate: "2019-03-01",
+      hireAsYear: 1,
       grades: {
         "2018": "",
         "2019": "B",
@@ -25,6 +26,26 @@ export function seedPromotionPoints(): PromotionPointRecord[] {
       note: "2023년 사원→대리(240점) 승진 · 이전 포인트 차감",
     },
     {
+      id: "pp-kim-js",
+      division: "경영지원본부",
+      team: "인사총무팀",
+      name: "김재선",
+      jobRole: "팀장",
+      title: "사원",
+      titleYears: 6,
+      hireDate: "2022-05-23",
+      /** 2년차 입사 → 경력인정 1년×B=60 */
+      hireAsYear: 2,
+      grades: {
+        "2022": "B",
+        "2023": "C",
+        "2024": "C",
+        "2025": "C",
+        "2026": "",
+      },
+      note: "2년차 경력입사 · 경력인정 60점",
+    },
+    {
       id: "pp1",
       division: "경영지원본부",
       team: "인사총무팀",
@@ -33,6 +54,7 @@ export function seedPromotionPoints(): PromotionPointRecord[] {
       title: "과장",
       titleYears: 4,
       hireDate: "2016-03-02",
+      hireAsYear: 1,
       grades: {
         "2018": "A",
         "2019": "B",
@@ -55,6 +77,7 @@ export function seedPromotionPoints(): PromotionPointRecord[] {
       title: "대리",
       titleYears: 3,
       hireDate: "2019-07-01",
+      hireAsYear: 1,
       grades: {
         "2019": "B",
         "2020": "B",
@@ -76,6 +99,7 @@ export function seedPromotionPoints(): PromotionPointRecord[] {
       title: "사원",
       titleYears: 4,
       hireDate: "2020-01-06",
+      hireAsYear: 1,
       grades: {
         "2020": "B",
         "2021": "A",
@@ -96,6 +120,7 @@ export function seedPromotionPoints(): PromotionPointRecord[] {
       title: "차장",
       titleYears: 5,
       hireDate: "2012-04-01",
+      hireAsYear: 1,
       grades: {
         "2018": "A",
         "2019": "A",

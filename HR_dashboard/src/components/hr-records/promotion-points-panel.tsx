@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ChevronDown,
   Download,
   Info,
   Pencil,
@@ -38,14 +39,18 @@ import {
   PROMOTION_TITLES,
   GRADE_POINTS,
   POINT_START_YEAR,
+  careerCreditPoints,
   computeEffectivePoints,
   currentYearEligibility,
   isPromotionTitle,
   nextYearEligibility,
   normalizeGrade,
+  normalizeHireAsYear,
+  comparePromotionPointOrder,
   pointsForGrade,
   promotionYears,
   promotionYearsRecent,
+  sortPromotionPointRecords,
 } from "@/lib/promotion-rules";
 import { seedPromotions } from "@/data/hr-records-seed";
 import type {
@@ -64,6 +69,19 @@ function emptyGrades(years: number[]): Record<string, string> {
 
 function cloneItems(items: PromotionPointRecord[]) {
   return JSON.parse(JSON.stringify(items)) as PromotionPointRecord[];
+}
+
+function normalizeRecord(raw: PromotionPointRecord): PromotionPointRecord {
+  const legacyHireAs =
+    raw.hireAsYear == null && raw.name === "김재선" ? 2 : raw.hireAsYear;
+  return {
+    ...raw,
+    hireAsYear: normalizeHireAsYear(legacyHireAs),
+    titleYears: Number(raw.titleYears) || 0,
+    grades: raw.grades ?? {},
+    note: raw.note ?? "",
+    jobRole: raw.jobRole || "팀원",
+  };
 }
 
 /** 사원명부 → 승진포인트 추가 폼 값 */
@@ -176,10 +194,31 @@ export function PromotionPointsPanel({
   /** recent: 최근 5개년 표시 / cumulative: 2018~ 전체 표시 */
   mode?: PromotionPointsViewMode;
 }) {
-  const list = useLocalList(
-    "hr-dashboard-promotion-points-v3",
-    seedPromotionPoints,
-  );
+  const list = useLocalList("hr-dashboard-promotion-points-v4", () => {
+    if (typeof window !== "undefined") {
+      try {
+        const legacy = window.localStorage.getItem(
+          "hr-dashboard-promotion-points-v3",
+        );
+        if (legacy) {
+          const parsed = JSON.parse(legacy) as PromotionPointRecord[];
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const migrated = parsed.map(normalizeRecord);
+            const hasKim = migrated.some((r) => r.name === "김재선");
+            return hasKim
+              ? migrated
+              : [
+                  ...migrated,
+                  ...seedPromotionPoints().filter((r) => r.name === "김재선"),
+                ];
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    return seedPromotionPoints();
+  });
   const promotions = useLocalList("hr-dashboard-promotions-v2", seedPromotions);
   const employees = useEmployees();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -193,9 +232,28 @@ export function PromotionPointsPanel({
     jobRole: "팀원",
     title: "사원",
     titleYears: "1",
+    hireAsYear: "1",
     hireDate: "",
     note: "",
   });
+  /** 본부·팀·직책·직위·당해대상 헤더 필터 (복수 선택, 빈 배열=전체) */
+  type RowFilterKey =
+    | "division"
+    | "team"
+    | "jobRole"
+    | "title"
+    | "currentLabel";
+  type RowFilters = Record<RowFilterKey, string[]>;
+  const emptyRowFilters = (): RowFilters => ({
+    division: [],
+    team: [],
+    jobRole: [],
+    title: [],
+    currentLabel: [],
+  });
+  const [filters, setFilters] = useState<RowFilters>(emptyRowFilters);
+  const [openFilter, setOpenFilter] = useState<RowFilterKey | null>(null);
+  const filterMenuRef = useRef<HTMLTableRowElement>(null);
   /** prerender에서 new Date() 고정 방지 — 마운트 후 당해 연도 확정 */
   const [currentYear, setCurrentYear] = useState<number | null>(null);
 
@@ -220,7 +278,10 @@ export function PromotionPointsPanel({
     if (!editing) setDraft(null);
   }, [editing]);
 
-  const working = editing && draft ? draft : list.items;
+  const working = useMemo(() => {
+    const source = editing && draft ? draft : list.items;
+    return sortPromotionPointRecords(source.map(normalizeRecord));
+  }, [editing, draft, list.items]);
   const teams = TEAMS_BY_DIVISION[form.division] ?? ORG_TEAMS;
 
   const promoDatesByName = useMemo(() => {
@@ -233,43 +294,250 @@ export function PromotionPointsPanel({
     return map;
   }, [promotions.items]);
 
+  /** 심사 전 단계만 필터 — 「대상」은 승진심사 확정이라 제외 */
+  const CURRENT_LABEL_ORDER = [
+    "대상가능",
+    "대기",
+    "비대상",
+    "해당없음",
+  ] as const;
+
+  function matchesMulti(selected: string[], value: string) {
+    return selected.length === 0 || selected.includes(value);
+  }
+
+  function summarizeSelected(selected: string[]) {
+    if (selected.length === 0) return null;
+    if (selected.length === 1) return selected[0]!;
+    return `${selected[0]} 외 ${selected.length - 1}`;
+  }
+
   const rows = useMemo(() => {
     if (currentYear == null || allYears.length === 0) return [];
-    return working.map((item) => {
-      const points = computeEffectivePoints({
-        title: item.title,
-        grades: item.grades,
-        years: allYears,
-        promotionDates: promoDatesByName[item.name.trim()] ?? [],
-      });
-      const currentGrade = item.grades[String(currentYear)] ?? "";
-      const currentYearPts = pointsForGrade(item.title, currentGrade);
-      const pointsBeforeCurrent = Math.max(
-        0,
-        points.effective - currentYearPts,
-      );
-      const current = currentYearEligibility({
-        title: item.title,
-        titleYears: item.titleYears,
-        pointsBeforeCurrentYear: pointsBeforeCurrent,
-        prevYearGrade: item.grades[String(prevYear)] ?? "",
-        currentYearGrade: currentGrade,
-      });
-      const next = nextYearEligibility({
-        title: item.title,
-        titleYears: item.titleYears,
-        totalPoints: points.effective,
-        currentYearGrade: currentGrade,
-      });
-      const req = isPromotionTitle(item.title)
-        ? PROMOTION_REQUIREMENTS[item.title]
-        : null;
-      return { item, points, current, next, req };
+    return working
+      .filter((item) => {
+        if (!matchesMulti(filters.division, item.division)) return false;
+        if (!matchesMulti(filters.team, item.team)) return false;
+        if (!matchesMulti(filters.jobRole, item.jobRole)) return false;
+        if (!matchesMulti(filters.title, item.title)) return false;
+        return true;
+      })
+      .map((item) => {
+        const points = computeEffectivePoints({
+          title: item.title,
+          grades: item.grades,
+          years: allYears,
+          promotionDates: promoDatesByName[item.name.trim()] ?? [],
+          hireAsYear: item.hireAsYear,
+        });
+        const currentGrade = item.grades[String(currentYear)] ?? "";
+        const currentYearPts = pointsForGrade(item.title, currentGrade);
+        const pointsBeforeCurrent = Math.max(
+          0,
+          points.effective - currentYearPts,
+        );
+        const current = currentYearEligibility({
+          title: item.title,
+          titleYears: item.titleYears,
+          pointsBeforeCurrentYear: pointsBeforeCurrent,
+          prevYearGrade: item.grades[String(prevYear)] ?? "",
+          currentYearGrade: currentGrade,
+        });
+        const next = nextYearEligibility({
+          title: item.title,
+          titleYears: item.titleYears,
+          totalPoints: points.effective,
+          currentYearGrade: currentGrade,
+        });
+        const req = isPromotionTitle(item.title)
+          ? PROMOTION_REQUIREMENTS[item.title]
+          : null;
+        return { item, points, current, next, req };
+      })
+      .filter((row) => matchesMulti(filters.currentLabel, row.current.label))
+      .sort((a, b) => comparePromotionPointOrder(a.item, b.item));
+  }, [
+    working,
+    promoDatesByName,
+    allYears,
+    currentYear,
+    prevYear,
+    filters,
+  ]);
+
+  const hasRowFilters = Object.values(filters).some((v) => v.length > 0);
+
+  const filterOptions = useMemo(() => {
+    const divisionOpts = [...ORG_DIVISIONS];
+    const teamOpts =
+      filters.division.length > 0
+        ? [
+            ...new Set(
+              filters.division.flatMap(
+                (d) => TEAMS_BY_DIVISION[d as OrgDivision] ?? [],
+              ),
+            ),
+          ]
+        : [...ORG_TEAMS];
+    return {
+      division: divisionOpts,
+      team: teamOpts,
+      jobRole: [...PROMOTION_ROLES],
+      title: [...PROMOTION_TITLES],
+      currentLabel: [...CURRENT_LABEL_ORDER],
+    };
+  }, [filters.division]);
+
+  useEffect(() => {
+    if (!openFilter) return;
+    function onDocClick(e: MouseEvent) {
+      if (
+        filterMenuRef.current &&
+        !filterMenuRef.current.contains(e.target as Node)
+      ) {
+        setOpenFilter(null);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpenFilter(null);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [openFilter]);
+
+  function toggleFilterValue(key: RowFilterKey, value: string) {
+    setFilters((prev) => {
+      const cur = prev[key];
+      const nextVals = cur.includes(value)
+        ? cur.filter((v) => v !== value)
+        : [...cur, value];
+      const next: RowFilters = { ...prev, [key]: nextVals };
+      if (key === "division") {
+        const allowed = new Set(
+          nextVals.flatMap(
+            (d) => TEAMS_BY_DIVISION[d as OrgDivision] ?? ORG_TEAMS,
+          ),
+        );
+        if (nextVals.length > 0) {
+          next.team = prev.team.filter((t) => allowed.has(t as OrgTeam));
+        }
+      }
+      return next;
     });
-  }, [working, promoDatesByName, allYears, currentYear, prevYear]);
+  }
+
+  function clearFilterKey(key: RowFilterKey) {
+    setFilters((prev) => ({ ...prev, [key]: [] }));
+  }
+
+  function clearRowFilters() {
+    setFilters(emptyRowFilters());
+    setOpenFilter(null);
+  }
+
+  function HeaderFilter({
+    filterKey,
+    label,
+    sticky,
+    className,
+  }: {
+    filterKey: RowFilterKey;
+    label: string;
+    sticky?: boolean;
+    className?: string;
+  }) {
+    const selected = filters[filterKey];
+    const active = selected.length > 0;
+    const open = openFilter === filterKey;
+    const options = filterOptions[filterKey];
+    const summary = summarizeSelected(selected);
+    return (
+      <th
+        className={cn(
+          "relative px-2 py-2",
+          sticky && "sticky left-0 z-20 bg-dh-deep",
+          className,
+        )}
+      >
+        <button
+          type="button"
+          className={cn(
+            "inline-flex items-center gap-0.5 rounded px-1 py-0.5 hover:bg-white/15",
+            active && "bg-dh-sea/80 font-semibold",
+          )}
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          onClick={() =>
+            setOpenFilter((prev) => (prev === filterKey ? null : filterKey))
+          }
+        >
+          <span>{label}</span>
+          {summary ? (
+            <span className="max-w-[5.5rem] truncate text-[10px] opacity-90">
+              · {summary}
+            </span>
+          ) : null}
+          <ChevronDown className="size-3.5 shrink-0 opacity-80" />
+        </button>
+        {open ? (
+          <div
+            role="listbox"
+            aria-multiselectable="true"
+            className="absolute left-0 top-full z-30 mt-1 max-h-56 min-w-[10rem] overflow-y-auto rounded-md border border-border bg-card py-1 text-left text-xs text-foreground shadow-lg"
+          >
+            <button
+              type="button"
+              role="option"
+              aria-selected={!active}
+              className={cn(
+                "block w-full px-3 py-1.5 text-left hover:bg-muted",
+                !active && "bg-dh-sky/20 font-medium text-dh-deep",
+              )}
+              onClick={() => clearFilterKey(filterKey)}
+            >
+              전체
+            </button>
+            {options.map((opt) => {
+              const checked = selected.includes(opt);
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  role="option"
+                  aria-selected={checked}
+                  className={cn(
+                    "flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-muted",
+                    checked && "bg-dh-sky/20 font-medium text-dh-deep",
+                  )}
+                  onClick={() => toggleFilterValue(filterKey, opt)}
+                >
+                  <span
+                    className={cn(
+                      "flex size-3.5 shrink-0 items-center justify-center rounded-sm border text-[9px]",
+                      checked
+                        ? "border-dh-sea bg-dh-sea text-white"
+                        : "border-border bg-background",
+                    )}
+                    aria-hidden
+                  >
+                    {checked ? "✓" : ""}
+                  </span>
+                  {opt}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </th>
+    );
+  }
 
   function startEdit() {
-    setDraft(cloneItems(list.items));
+    setDraft(sortPromotionPointRecords(cloneItems(list.items)));
     setEditing(true);
   }
 
@@ -280,7 +548,7 @@ export function PromotionPointsPanel({
 
   function saveEdit() {
     if (!draft) return;
-    list.replaceAll(draft);
+    list.replaceAll(sortPromotionPointRecords(draft.map(normalizeRecord)));
     setEditing(false);
     setDraft(null);
     setSavedFlash(true);
@@ -302,14 +570,21 @@ export function PromotionPointsPanel({
       title: form.title,
       titleYears: Number(form.titleYears) || 0,
       hireDate: form.hireDate,
+      hireAsYear: normalizeHireAsYear(Number(form.hireAsYear)),
       grades: emptyGrades(allYears),
       note: form.note.trim(),
     };
-    setDraft((prev) => [...(prev ?? cloneItems(list.items)), item]);
+    setDraft((prev) =>
+      sortPromotionPointRecords([
+        ...(prev ?? cloneItems(list.items)).map(normalizeRecord),
+        item,
+      ]),
+    );
     setForm({
       ...form,
       name: "",
       titleYears: "1",
+      hireAsYear: "1",
       hireDate: "",
       note: "",
     });
@@ -319,7 +594,14 @@ export function PromotionPointsPanel({
     if (!editing) return;
     setDraft((prev) => {
       const base = prev ?? cloneItems(list.items);
-      return base.map((row) => (row.id === id ? { ...row, ...next } : row));
+      const updated = base.map((row) =>
+        row.id === id ? { ...row, ...next } : row,
+      );
+      const touchesOrder =
+        next.jobRole != null || next.title != null || next.titleYears != null;
+      return touchesOrder
+        ? sortPromotionPointRecords(updated.map(normalizeRecord))
+        : updated;
     });
   }
 
@@ -369,12 +651,16 @@ export function PromotionPointsPanel({
           title: cellStr(row, "직위", "title") || "사원",
           titleYears: cellNum(row, "직위년차", "titleYears") || 0,
           hireDate: cellDate(row, "입사일자", "입사일", "hireDate"),
+          hireAsYear: normalizeHireAsYear(
+            cellNum(row, "입사인정년차", "인정년차", "hireAsYear") || 1,
+          ),
           grades,
           note: cellStr(row, "비고", "note"),
         };
       })
-      .filter((r) => r.name);
-    if (next.length) setDraft(next);
+      .filter((r) => r.name)
+      .map(normalizeRecord);
+    if (next.length) setDraft(sortPromotionPointRecords(next));
   }
 
   function exportExcel() {
@@ -388,6 +674,9 @@ export function PromotionPointsPanel({
           직위: item.title,
           직위년차: item.titleYears,
           입사일자: item.hireDate,
+          입사인정년차: item.hireAsYear,
+          경력인정포인트: points.careerCredit,
+          재직포인트: points.servicePoints,
         };
         for (const y of displayYears) {
           base[`${y}`] = item.grades[String(y)] ?? "";
@@ -424,8 +713,9 @@ export function PromotionPointsPanel({
             <h2 className="font-heading text-lg font-semibold text-dh-deep dark:text-dh-light">
               {isCumulative ? "승진포인트 누적 현황" : "승진포인트 현황"}
             </h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              등급 점수: S 100 · A 80 · B 60 · C 40 · D 20.{" "}
+              <p className="mt-1 text-xs text-muted-foreground">
+              등급 점수: S 100 · A 80 · B 60 · C 40 · D 20. 경력직은 「입사
+              인정 년차」로 기존 (년차−1)×B(60)점을 경력인정합니다.{" "}
               {isCumulative ? (
                 <>
                   <span className="font-medium text-foreground">
@@ -660,6 +950,22 @@ export function PromotionPointsPanel({
               }
             />
           </div>
+          <div className="grid gap-1">
+            <Label title="2=2년차 입사 → 경력인정 60점">입사 인정 년차</Label>
+            <Input
+              type="number"
+              min={1}
+              max={40}
+              value={form.hireAsYear}
+              disabled={!editing}
+              onChange={(e) =>
+                setForm({ ...form, hireAsYear: e.target.value })
+              }
+            />
+            <p className="text-[10px] text-muted-foreground">
+              예: 2 → +{careerCreditPoints(2)}점
+            </p>
+          </div>
           <div className="flex items-end">
             <Button
               className="w-full"
@@ -672,22 +978,86 @@ export function PromotionPointsPanel({
           </div>
         </div>
 
+        {hasRowFilters ? (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-dh-sea/30 bg-dh-sky/10 px-3 py-2 text-xs">
+            <span className="font-medium text-dh-deep dark:text-dh-light">
+              필터
+            </span>
+            {filters.division.length > 0 ? (
+              <span className="rounded-md border border-border bg-card px-2 py-0.5">
+                본부: {filters.division.join(", ")}
+              </span>
+            ) : null}
+            {filters.team.length > 0 ? (
+              <span className="rounded-md border border-border bg-card px-2 py-0.5">
+                팀: {filters.team.join(", ")}
+              </span>
+            ) : null}
+            {filters.jobRole.length > 0 ? (
+              <span className="rounded-md border border-border bg-card px-2 py-0.5">
+                직책: {filters.jobRole.join(", ")}
+              </span>
+            ) : null}
+            {filters.title.length > 0 ? (
+              <span className="rounded-md border border-border bg-card px-2 py-0.5">
+                직위: {filters.title.join(", ")}
+              </span>
+            ) : null}
+            {filters.currentLabel.length > 0 ? (
+              <span className="rounded-md border border-border bg-card px-2 py-0.5">
+                당해대상: {filters.currentLabel.join(", ")}
+              </span>
+            ) : null}
+            <span className="text-muted-foreground">{rows.length}명</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              onClick={clearRowFilters}
+            >
+              전체 보기
+            </Button>
+          </div>
+        ) : (
+          <p className="mb-2 text-[11px] text-muted-foreground">
+            표 헤더의 본부·팀·직책·직위
+            {!isCumulative ? "·당해대상" : ""}을 눌러 복수 선택할 수 있습니다.
+          </p>
+        )}
+
         <div className="overflow-x-auto rounded-lg border border-border">
           <table
             className={cn(
               "gw-data-table w-full text-sm",
-              isCumulative ? "min-w-[1100px]" : "min-w-[860px]",
+              isCumulative ? "min-w-[1240px]" : "min-w-[980px]",
             )}
           >
             <thead>
-              <tr className="bg-dh-deep text-white">
-                <th className="sticky left-0 z-10 bg-dh-deep px-2 py-2">본부</th>
-                <th className="px-2 py-2">팀</th>
+              <tr ref={filterMenuRef} className="bg-dh-deep text-white">
+                <HeaderFilter filterKey="division" label="본부" sticky />
+                <HeaderFilter filterKey="team" label="팀" />
                 <th className="px-2 py-2">성명</th>
-                <th className="px-2 py-2">직책</th>
-                <th className="px-2 py-2">직위</th>
+                <HeaderFilter filterKey="jobRole" label="직책" />
+                <HeaderFilter filterKey="title" label="직위" />
                 <th className="px-2 py-2">년차</th>
                 <th className="px-2 py-2">입사일</th>
+                <th
+                  className="px-2 py-2 text-center"
+                  title="경력직 입사 시 인정 년차 (2=2년차 입사)"
+                >
+                  인정
+                  <br />
+                  년차
+                </th>
+                <th
+                  className="px-2 py-2 text-center"
+                  title="(인정년차−1)×B(60)"
+                >
+                  경력
+                  <br />
+                  인정
+                </th>
                 {displayYears.map((y) => (
                   <th
                     key={y}
@@ -706,7 +1076,11 @@ export function PromotionPointsPanel({
                 ) : (
                   <>
                     <th className="px-2 py-2 text-center">유효</th>
-                    <th className="px-2 py-2 text-center">당해대상</th>
+                    <HeaderFilter
+                      filterKey="currentLabel"
+                      label="당해대상"
+                      className="text-center"
+                    />
                     <th className="px-2 py-2 text-center">차기가능</th>
                   </>
                 )}
@@ -718,7 +1092,7 @@ export function PromotionPointsPanel({
                 <tr>
                   <td
                     colSpan={
-                      8 + displayYears.length + (isCumulative ? 1 : 3)
+                      10 + displayYears.length + (isCumulative ? 1 : 3)
                     }
                     className="px-3 py-10 text-center text-muted-foreground"
                   >
@@ -729,11 +1103,13 @@ export function PromotionPointsPanel({
                 <tr>
                   <td
                     colSpan={
-                      8 + displayYears.length + (isCumulative ? 1 : 3)
+                      10 + displayYears.length + (isCumulative ? 1 : 3)
                     }
                     className="px-3 py-10 text-center text-muted-foreground"
                   >
-                    등록된 인원이 없습니다.
+                    {hasRowFilters
+                      ? "선택한 조건에 맞는 인원이 없습니다. 「전체 보기」로 필터를 해제하세요."
+                      : "등록된 인원이 없습니다."}
                   </td>
                 </tr>
               ) : (
@@ -865,6 +1241,46 @@ export function PromotionPointsPanel({
                         item.hireDate
                       )}
                     </td>
+                    <td className="px-2 py-1.5 text-center">
+                      {editing ? (
+                        <Input
+                          type="number"
+                          min={1}
+                          max={40}
+                          className="mx-auto h-7 w-14 px-1 text-center text-xs"
+                          value={item.hireAsYear}
+                          title="입사 인정 년차"
+                          onChange={(e) =>
+                            patch(item.id, {
+                              hireAsYear: normalizeHireAsYear(
+                                Number(e.target.value),
+                              ),
+                            })
+                          }
+                        />
+                      ) : (
+                        <span className="tabular-nums">{item.hireAsYear}</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
+                      <span
+                        className={cn(
+                          "tabular-nums text-sm font-medium",
+                          points.careerCredit > 0
+                            ? "text-dh-real"
+                            : "text-muted-foreground",
+                        )}
+                        title={
+                          points.careerCredit > 0
+                            ? `인정 ${item.hireAsYear - 1}년 × B(60)`
+                            : "신입(인정 1년차) — 경력인정 없음"
+                        }
+                      >
+                        {points.careerCredit > 0
+                          ? `+${points.careerCredit}`
+                          : "—"}
+                      </span>
+                    </td>
                     {displayYears.map((y) => {
                       const g = item.grades[String(y)] ?? "";
                       const pts = pointsForGrade(item.title, g);
@@ -921,6 +1337,12 @@ export function PromotionPointsPanel({
                         <span className="text-sm font-semibold text-dh-real">
                           {points.gross}
                         </span>
+                        {points.careerCredit > 0 ? (
+                          <div className="text-[10px] leading-tight text-muted-foreground">
+                            재직 {points.servicePoints}
+                            <br />+인정 {points.careerCredit}
+                          </div>
+                        ) : null}
                       </td>
                     ) : (
                       <>
@@ -934,6 +1356,13 @@ export function PromotionPointsPanel({
                           {req?.nextTitle ? (
                             <div className="text-[10px] text-muted-foreground">
                               /{req.points}
+                            </div>
+                          ) : null}
+                          {points.careerCredit > 0 &&
+                          points.lastPromotionYear == null ? (
+                            <div className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
+                              재직 {points.servicePoints}+인정{" "}
+                              {points.careerCredit}
                             </div>
                           ) : null}
                           {points.deducted > 0 ? (
@@ -990,8 +1419,9 @@ export function PromotionPointsPanel({
           </p>
         ) : (
           <p className="mt-2 text-[11px] text-muted-foreground">
-            연도별 칸은 등급과 점수이며, 합계는 {POINT_START_YEAR}년~
-            {currentYear ?? "…"}년 포인트 총합입니다.
+            연도별 칸은 등급과 점수이며, 합계는 재직 중 포인트(
+            {POINT_START_YEAR}년~{currentYear ?? "…"}년) + 경력인정입니다.
+            경력인정 = (입사 인정 년차 − 1) × B(60).
           </p>
         )}
       </section>

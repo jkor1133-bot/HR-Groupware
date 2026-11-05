@@ -382,6 +382,11 @@ export type PromotionPointRecord = {
   /** 직위년차 */
   titleYears: number;
   hireDate: string;
+  /**
+   * 입사 인정 년차 (경력직).
+   * 1=신입, 2=2년차 입사 → 기존 1년 B(60점) 인정, 5=5년차 입사 → 4×60=240점.
+   */
+  hireAsYear: number;
   grades: Record<string, string>;
   note: string;
 };
