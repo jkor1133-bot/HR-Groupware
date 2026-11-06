@@ -12,7 +12,7 @@ import type {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const STORAGE_KEY = "hr-dashboard-congrats-group-exec-policy-v1";
+const STORAGE_KEY = "hr-dashboard-congrats-group-exec-policy-v4";
 
 const CELL_KEYS = [
   "congChair",
@@ -23,6 +23,7 @@ const CELL_KEYS = [
 
 type CellKey = (typeof CELL_KEYS)[number];
 
+/** 현행 기준표 */
 function seedCompanyRows(): CongratPolicyRow[] {
   return [
     {
@@ -143,6 +144,147 @@ function seedAffiliateRows(): CongratPolicyRow[] {
   ];
 }
 
+/** 2023.03.01 시행 이력 (엑셀 기준) */
+function seedHistoryCompanyRows(): CongratPolicyRow[] {
+  return [
+    {
+      id: "h-c1",
+      group: "현직임원 및 고문",
+      groupSpan: 5,
+      target: "본인",
+      congChair: "",
+      congCeo: "",
+      condChair: "",
+      condCeo: "",
+    },
+    {
+      id: "h-c2",
+      group: "현직임원 및 고문",
+      groupSpan: 0,
+      target: "자녀",
+      congChair: "300(500)",
+      congCeo: "100",
+      condChair: "",
+      condCeo: "",
+    },
+    {
+      id: "h-c3",
+      group: "현직임원 및 고문",
+      groupSpan: 0,
+      target: "부모",
+      congChair: "",
+      congCeo: "",
+      condChair: "300(500)",
+      condCeo: "100",
+    },
+    {
+      id: "h-c4",
+      group: "현직임원 및 고문",
+      groupSpan: 0,
+      target: "처 부모",
+      congChair: "",
+      congCeo: "",
+      condChair: "",
+      condCeo: "100",
+    },
+    {
+      id: "h-c5",
+      group: "현직임원 및 고문",
+      groupSpan: 0,
+      target: "형제자매",
+      congChair: "",
+      congCeo: "",
+      condChair: "",
+      condCeo: "50",
+    },
+    {
+      id: "h-c6",
+      group: "퇴직임원\n(임원출신)",
+      groupSpan: 3,
+      target: "본인",
+      congChair: "",
+      congCeo: "",
+      condChair: "100",
+      condCeo: "100",
+    },
+    {
+      id: "h-c7",
+      group: "퇴직임원\n(임원출신)",
+      groupSpan: 0,
+      target: "자녀",
+      congChair: "100",
+      congCeo: "100",
+      condChair: "",
+      condCeo: "",
+    },
+    {
+      id: "h-c8",
+      group: "퇴직임원\n(임원출신)",
+      groupSpan: 0,
+      target: "부모",
+      congChair: "",
+      congCeo: "",
+      condChair: "100",
+      condCeo: "100",
+    },
+  ];
+}
+
+function seedHistoryAffiliateRows(): CongratPolicyRow[] {
+  return [
+    {
+      id: "h-a1",
+      group: "현직임원",
+      groupSpan: 3,
+      target: "자녀",
+      congChair: "",
+      congCeo: "100",
+      condChair: "",
+      condCeo: "",
+    },
+    {
+      id: "h-a2",
+      group: "현직임원",
+      groupSpan: 0,
+      target: "부모",
+      congChair: "",
+      congCeo: "",
+      condChair: "",
+      condCeo: "100",
+    },
+    {
+      id: "h-a3",
+      group: "현직임원",
+      groupSpan: 0,
+      target: "처 부모",
+      congChair: "",
+      congCeo: "",
+      condChair: "",
+      condCeo: "100",
+    },
+    {
+      id: "h-a4",
+      group: "현직고문 / 퇴직임원",
+      groupSpan: 2,
+      target: "자녀",
+      congChair: "",
+      congCeo: "50",
+      condChair: "",
+      condCeo: "",
+    },
+    {
+      id: "h-a5",
+      group: "현직고문 / 퇴직임원",
+      groupSpan: 0,
+      target: "부모",
+      congChair: "",
+      congCeo: "",
+      condChair: "",
+      condCeo: "50",
+    },
+  ];
+}
+
 function seedSnapshot(): CongratPolicySnapshot {
   return {
     id: "current",
@@ -156,8 +298,25 @@ function seedSnapshot(): CongratPolicySnapshot {
   };
 }
 
+function seedHistory202303(): CongratPolicySnapshot {
+  return {
+    id: "hist-2023-03-01",
+    effectiveDate: "2023-03-01",
+    note: "그룹사 임원 경조사 지급기준",
+    description:
+      "하기 지급기준은 제분, 사료, 싸이로, 바이탈피드 총 4개사 적용",
+    companyFootnote: "( )는 대표의 경우",
+    companyRows: seedHistoryCompanyRows(),
+    affiliateRows: seedHistoryAffiliateRows(),
+    archivedAt: "2023-03-01T00:00:00.000Z",
+  };
+}
+
 function seedStore(): CongratPolicyStore {
-  return { current: seedSnapshot(), history: [] };
+  return {
+    current: seedSnapshot(),
+    history: [seedHistory202303()],
+  };
 }
 
 function cloneSnap(s: CongratPolicySnapshot): CongratPolicySnapshot {
@@ -259,12 +418,14 @@ function PolicyTable({
                 </td>
                 {CELL_KEYS.map((key) => {
                   const v = row[key];
+                  const highlightParen = Boolean(v && v.includes("("));
                   return (
                     <td
                       key={key}
                       className={cn(
                         "border border-border px-1.5 py-1.5 text-center tabular-nums",
                         !v && !editing && "text-muted-foreground/40",
+                        highlightParen && !editing && "font-medium text-blue-600 dark:text-blue-400",
                       )}
                     >
                       {editing && onChangeCell ? (

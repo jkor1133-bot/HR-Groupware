@@ -543,6 +543,58 @@ export type PolicyMemoRecord = {
   note: string;
 };
 
+/** 그룹사 임원 차량 지급 기준 한 행 */
+export type ExecVehiclePolicyRow = {
+  id: string;
+  /** 직급 구분 */
+  rank: string;
+  /** 차종 */
+  model: string;
+  /** 배기량 (cc, 표시 문자열) */
+  displacement: string;
+};
+
+export type ExecVehiclePolicySnapshot = {
+  id: string;
+  /** 예: 현재 (2020.04 이후) */
+  periodLabel: string;
+  effectiveDate: string;
+  note: string;
+  rows: ExecVehiclePolicyRow[];
+  footnotes: string[];
+  archivedAt?: string;
+};
+
+export type ExecVehiclePolicyStore = {
+  current: ExecVehiclePolicySnapshot;
+  history: ExecVehiclePolicySnapshot[];
+};
+
+/** 당사 업무용 차량 지급 기준 행 */
+export type CompanyVehiclePolicyRow = {
+  id: string;
+  /** 구분 (직책·직급) */
+  rank: string;
+  /** 차종 */
+  model: string;
+};
+
+export type CompanyVehiclePolicySnapshot = {
+  id: string;
+  /** 예: 현재 */
+  periodLabel: string;
+  effectiveDate: string;
+  note: string;
+  rows: CompanyVehiclePolicyRow[];
+  footnotes: string[];
+  archivedAt?: string;
+};
+
+export type CompanyVehiclePolicyStore = {
+  current: CompanyVehiclePolicySnapshot;
+  history: CompanyVehiclePolicySnapshot[];
+};
+
 /** 총무 · 골프 회원권 */
 export type GolfMembershipRecord = {
   id: string;

@@ -6,20 +6,19 @@ import { ContractsDbPanel } from "@/components/hr-records/contracts-db-panel";
 import { IpAssignmentsPanel } from "@/components/hr-records/ip-assignments-panel";
 import { PcAssignmentsPanel } from "@/components/hr-records/pc-assignments-panel";
 import { PermitsDbPanel } from "@/components/hr-records/permits-db-panel";
+import { CompanyVehiclePolicyPanel } from "@/components/hr-records/company-vehicle-policy-panel";
 import { CongratulatoryPolicyPanel } from "@/components/hr-records/congratulatory-policy-panel";
+import { ExecVehiclePolicyPanel } from "@/components/hr-records/exec-vehicle-policy-panel";
 import { PayBandPanel } from "@/components/hr-records/pay-band-panel";
 import { StaffCongratulatoryPolicyPanel } from "@/components/hr-records/staff-congratulatory-policy-panel";
-import { PolicyMemoPanel } from "@/components/hr-records/policy-memo-panel";
 import { PromotionHistoryPanel } from "@/components/hr-records/promotion-history-panel";
 import { PromotionPointsPanel } from "@/components/hr-records/promotion-points-panel";
 import { SimpleRecordsPanel } from "@/components/hr-records/simple-records-panel";
 import { StaffMovementsPanel } from "@/components/hr-records/staff-movements-panel";
 import {
   seedAwards,
-  seedCompanyVehiclePolicy,
   seedCompanyVehicles,
   seedGolfMemberships,
-  seedGroupExecVehiclePolicy,
   seedOverseasTrainings,
 } from "@/data/hr-records-seed";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -293,20 +292,8 @@ export function HrRecordsView({
                 { key: "note", label: "비고" },
               ]}
             />
-            <PolicyMemoPanel
-              title="그룹사 임원 차량 지급 기준"
-              description="개정·공지 이력을 일자별로 남겨 히스토리를 관리합니다."
-              storageKey="hr-dashboard-vehicle-policy-group-exec-v1"
-              seedFn={seedGroupExecVehiclePolicy}
-              idPrefix="gev"
-            />
-            <PolicyMemoPanel
-              title="당사 차량 지급 기준"
-              description="당사 업무용 차량 지급·운영 기준 변경 이력을 관리합니다."
-              storageKey="hr-dashboard-vehicle-policy-company-v1"
-              seedFn={seedCompanyVehiclePolicy}
-              idPrefix="cvp"
-            />
+            <ExecVehiclePolicyPanel />
+            <CompanyVehiclePolicyPanel />
           </div>
         );
       case "overseas":
