@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { FolderKanban } from "lucide-react";
 import { ContractsDbPanel } from "@/components/hr-records/contracts-db-panel";
+import { IpAssignmentsPanel } from "@/components/hr-records/ip-assignments-panel";
+import { PcAssignmentsPanel } from "@/components/hr-records/pc-assignments-panel";
 import { PermitsDbPanel } from "@/components/hr-records/permits-db-panel";
 import { PromotionHistoryPanel } from "@/components/hr-records/promotion-history-panel";
 import { PromotionPointsPanel } from "@/components/hr-records/promotion-points-panel";
@@ -13,7 +15,6 @@ import {
   seedCompanyVehicles,
   seedGolfMemberships,
   seedOverseasTrainings,
-  seedPcAssignments,
   seedQualificationAllowances,
 } from "@/data/hr-records-seed";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -26,7 +27,6 @@ import type {
   CompanyVehicleRecord,
   GolfMembershipRecord,
   OverseasTrainingRecord,
-  PcAssignmentRecord,
   QualificationAllowanceRecord,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -58,7 +58,10 @@ const SUB_TABS: Record<MainTab, SubTab[]> = {
     { id: "vehicles", label: "업무용 차량 현황" },
     { id: "overseas", label: "해외연수 현황" },
   ],
-  it: [{ id: "pcs", label: "PC 지급 현황" }],
+  it: [
+    { id: "pcs", label: "PC 지급 현황" },
+    { id: "ips", label: "IP 부여 현황" },
+  ],
 };
 
 function PromotionsSection() {
@@ -349,35 +352,9 @@ export function HrRecordsView({
           />
         );
       case "pcs":
-        return (
-          <SimpleRecordsPanel<PcAssignmentRecord>
-            title="PC 지급 현황"
-            description="업무용 PC·노트북 지급 이력을 등록·관리합니다. 성명은 사원명부에서 선택할 수 있습니다."
-            storageKey="hr-dashboard-pcs-v1"
-            seedFn={seedPcAssignments}
-            idPrefix="pc"
-            excelFileName="PC지급현황.xlsx"
-            employeeLink={{ nameKey: "employeeName", teamKey: "team" }}
-            fields={[
-              {
-                key: "employeeName",
-                label: "성명",
-                type: "employee",
-                required: true,
-              },
-              { key: "team", label: "소속", required: true },
-              { key: "assetTag", label: "자산번호", required: true },
-              { key: "model", label: "모델", required: true },
-              {
-                key: "assignedDate",
-                label: "지급일",
-                type: "date",
-                required: true,
-              },
-              { key: "note", label: "비고" },
-            ]}
-          />
-        );
+        return <PcAssignmentsPanel />;
+      case "ips":
+        return <IpAssignmentsPanel />;
       default:
         return null;
     }

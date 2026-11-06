@@ -457,6 +457,16 @@ export type PcAssignmentRecord = {
   note: string;
 };
 
+/** IT · IP 부여 */
+export type IpAssignmentRecord = {
+  id: string;
+  /** 사용자 (성명·직책명 등) */
+  userName: string;
+  /** IPv4 예: 210.101.130.2 */
+  ipAddress: string;
+  note: string;
+};
+
 export type LaborCostRow = {
   id: string;
   yearMonth: string; // YYYY-MM

@@ -3,6 +3,7 @@ import type {
   CompanyVehicleRecord,
   GolfMembershipRecord,
   OverseasTrainingRecord,
+  IpAssignmentRecord,
   PcAssignmentRecord,
   PromotionRecord,
   QualificationAllowanceRecord,
@@ -152,6 +153,42 @@ export function seedPcAssignments(): PcAssignmentRecord[] {
       model: "MacBook Pro 14",
       assignedDate: ymdOffset(-60),
       note: "개발용",
+    },
+  ];
+}
+
+/** 대한싸이로 IP 주소 현황 샘플 */
+export function seedIpAssignments(): IpAssignmentRecord[] {
+  return [
+    {
+      id: "ip1",
+      userName: "영양사",
+      ipAddress: "210.101.130.141",
+      note: "지하",
+    },
+    {
+      id: "ip2",
+      userName: "이영운",
+      ipAddress: "210.101.130.44",
+      note: "1층",
+    },
+    {
+      id: "ip3",
+      userName: "고인환",
+      ipAddress: "210.101.130.2",
+      note: "1층",
+    },
+    {
+      id: "ip4",
+      userName: "김형철",
+      ipAddress: "210.101.130.43",
+      note: "",
+    },
+    {
+      id: "ip5",
+      userName: "유병곤",
+      ipAddress: "210.101.130.66",
+      note: "",
     },
   ];
 }

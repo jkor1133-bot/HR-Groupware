@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ChevronDown,
   Download,
   Pencil,
   Plus,
@@ -17,6 +18,8 @@ import { Label } from "@/components/ui/label";
 import { useEmployees } from "@/hooks/use-employees";
 import { useStaffMovements } from "@/hooks/use-staff-movements";
 import {
+  DEPARTMENTS_BY_DIVISION,
+  EMPLOYEE_DEPARTMENTS,
   EMPLOYEE_DIVISIONS,
   EMPLOYEE_GENDERS,
   EMPLOYEE_JOB_TRACKS,
@@ -79,6 +82,28 @@ function cloneItems(items: StaffMovementRecord[]) {
   return JSON.parse(JSON.stringify(items)) as StaffMovementRecord[];
 }
 
+type MovFilterKey = "division" | "department" | "jobTrack" | "title";
+type MovFilters = Record<MovFilterKey, string[]>;
+
+function emptyMovFilters(): MovFilters {
+  return {
+    division: [],
+    department: [],
+    jobTrack: [],
+    title: [],
+  };
+}
+
+function matchesMulti(selected: string[], value: string) {
+  return selected.length === 0 || selected.includes(value);
+}
+
+function summarizeSelected(selected: string[]) {
+  if (selected.length === 0) return null;
+  if (selected.length === 1) return selected[0]!;
+  return `${selected[0]} 외 ${selected.length - 1}`;
+}
+
 export function StaffMovementsPanel() {
   const movements = useStaffMovements();
   const roster = useEmployees();
@@ -90,15 +115,197 @@ export function StaffMovementsPanel() {
   const [savedFlash, setSavedFlash] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
+  const [filters, setFilters] = useState<MovFilters>(emptyMovFilters);
+  const [openFilter, setOpenFilter] = useState<MovFilterKey | null>(null);
+  const filterMenuRef = useRef<HTMLTableRowElement>(null);
 
   const working = editing && draft ? draft : movements.items;
+
+  const filterOptions = useMemo(() => {
+    const divisionOpts = [...EMPLOYEE_DIVISIONS];
+    const departmentOpts =
+      filters.division.length > 0
+        ? [
+            ...new Set(
+              filters.division.flatMap(
+                (d) =>
+                  DEPARTMENTS_BY_DIVISION[
+                    d as (typeof EMPLOYEE_DIVISIONS)[number]
+                  ] ?? [],
+              ),
+            ),
+          ]
+        : [...EMPLOYEE_DEPARTMENTS];
+    return {
+      division: divisionOpts,
+      department: departmentOpts,
+      jobTrack: [...EMPLOYEE_JOB_TRACKS],
+      title: [...EMPLOYEE_TITLES],
+    };
+  }, [filters.division]);
+
   const filtered = useMemo(
     () =>
       [...working]
         .filter((m) => m.kind === kind)
-        .sort((a, b) => b.eventDate.localeCompare(a.eventDate)),
-    [working, kind],
+        .filter((m) => {
+          if (!matchesMulti(filters.division, m.division)) return false;
+          if (!matchesMulti(filters.department, m.department)) return false;
+          if (!matchesMulti(filters.jobTrack, m.jobTrack)) return false;
+          if (!matchesMulti(filters.title, m.title)) return false;
+          return true;
+        })
+        // 입사자=입사일, 퇴사자=퇴사일 (둘 다 eventDate) · 최신순
+        .sort((a, b) => {
+          const byDate = b.eventDate.localeCompare(a.eventDate);
+          if (byDate !== 0) return byDate;
+          return (a.name || "").localeCompare(b.name || "", "ko");
+        }),
+    [working, kind, filters],
   );
+
+  const hasFilters = Object.values(filters).some((v) => v.length > 0);
+
+  useEffect(() => {
+    if (!openFilter) return;
+    function onDocClick(e: MouseEvent) {
+      if (
+        filterMenuRef.current &&
+        !filterMenuRef.current.contains(e.target as Node)
+      ) {
+        setOpenFilter(null);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpenFilter(null);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [openFilter]);
+
+  function toggleFilterValue(key: MovFilterKey, value: string) {
+    setFilters((prev) => {
+      const cur = prev[key];
+      const nextVals = cur.includes(value)
+        ? cur.filter((v) => v !== value)
+        : [...cur, value];
+      const next: MovFilters = { ...prev, [key]: nextVals };
+      if (key === "division") {
+        const allowed = new Set(
+          nextVals.flatMap(
+            (d) =>
+              DEPARTMENTS_BY_DIVISION[
+                d as (typeof EMPLOYEE_DIVISIONS)[number]
+              ] ?? EMPLOYEE_DEPARTMENTS,
+          ),
+        );
+        if (nextVals.length > 0) {
+          next.department = prev.department.filter((t) => allowed.has(t));
+        }
+      }
+      return next;
+    });
+  }
+
+  function clearFilterKey(key: MovFilterKey) {
+    setFilters((prev) => ({ ...prev, [key]: [] }));
+  }
+
+  function clearFilters() {
+    setFilters(emptyMovFilters());
+    setOpenFilter(null);
+  }
+
+  function HeaderFilter({
+    filterKey,
+    label,
+  }: {
+    filterKey: MovFilterKey;
+    label: string;
+  }) {
+    const selected = filters[filterKey];
+    const active = selected.length > 0;
+    const open = openFilter === filterKey;
+    const options = filterOptions[filterKey];
+    const summary = summarizeSelected(selected);
+    return (
+      <th className="relative px-2 py-2">
+        <button
+          type="button"
+          className={cn(
+            "inline-flex items-center gap-0.5 rounded px-1 py-0.5 hover:bg-white/15",
+            active && "bg-dh-sea/80 font-semibold",
+          )}
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          onClick={() =>
+            setOpenFilter((prev) => (prev === filterKey ? null : filterKey))
+          }
+        >
+          <span>{label}</span>
+          {summary ? (
+            <span className="max-w-[5.5rem] truncate text-[10px] opacity-90">
+              · {summary}
+            </span>
+          ) : null}
+          <ChevronDown className="size-3.5 shrink-0 opacity-80" />
+        </button>
+        {open ? (
+          <div
+            role="listbox"
+            aria-multiselectable="true"
+            className="absolute left-0 top-full z-30 mt-1 max-h-56 min-w-[10rem] overflow-y-auto rounded-md border border-border bg-card py-1 text-left text-xs text-foreground shadow-lg"
+          >
+            <button
+              type="button"
+              role="option"
+              aria-selected={!active}
+              className={cn(
+                "block w-full px-3 py-1.5 text-left hover:bg-muted",
+                !active && "bg-dh-sky/20 font-medium text-dh-deep",
+              )}
+              onClick={() => clearFilterKey(filterKey)}
+            >
+              전체
+            </button>
+            {options.map((opt) => {
+              const checked = selected.includes(opt);
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  role="option"
+                  aria-selected={checked}
+                  className={cn(
+                    "flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-muted",
+                    checked && "bg-dh-sky/20 font-medium text-dh-deep",
+                  )}
+                  onClick={() => toggleFilterValue(filterKey, opt)}
+                >
+                  <span
+                    className={cn(
+                      "flex size-3.5 shrink-0 items-center justify-center rounded-sm border text-[9px]",
+                      checked
+                        ? "border-dh-sea bg-dh-sea text-white"
+                        : "border-border bg-background",
+                    )}
+                    aria-hidden
+                  >
+                    {checked ? "✓" : ""}
+                  </span>
+                  {opt}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </th>
+    );
+  }
 
   const deptOptions = useMemo(
     () => departmentsForDivision(form.division),
@@ -367,8 +574,9 @@ export function StaffMovementsPanel() {
             입퇴사자 현황
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            입사·퇴사를 등록하면 HR 대시보드에 반영됩니다. 사원명부에서 입사일이
-            2026-01-01 이후인 인원은 입사자에 자동 등록됩니다.
+            입사·퇴사를 등록하면 HR 대시보드에 반영됩니다. 입사자는 입사일·퇴사자는
+            퇴사일 최신순이며, 상위부서·부서·직군·직위 헤더에서 복수 필터할 수
+            있습니다.
           </p>
           {editing ? (
             <p className="mt-1 text-xs font-medium text-dh-real">
@@ -437,6 +645,7 @@ export function StaffMovementsPanel() {
           onClick={() => {
             setKind("hire");
             setForm(emptyForm());
+            clearFilters();
           }}
           className={cn(
             "rounded-md px-3 py-1.5 text-xs font-medium sm:text-sm",
@@ -452,6 +661,7 @@ export function StaffMovementsPanel() {
           onClick={() => {
             setKind("leave");
             setForm(emptyForm());
+            clearFilters();
           }}
           className={cn(
             "rounded-md px-3 py-1.5 text-xs font-medium sm:text-sm",
@@ -661,16 +871,54 @@ export function StaffMovementsPanel() {
         </div>
       </div>
 
+      {hasFilters ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-dh-sea/30 bg-dh-sky/10 px-3 py-2 text-xs">
+          <span className="font-medium text-dh-deep dark:text-dh-light">
+            필터
+          </span>
+          {filters.division.length > 0 ? (
+            <span className="rounded-md border border-border bg-card px-2 py-0.5">
+              상위부서: {filters.division.join(", ")}
+            </span>
+          ) : null}
+          {filters.department.length > 0 ? (
+            <span className="rounded-md border border-border bg-card px-2 py-0.5">
+              부서: {filters.department.join(", ")}
+            </span>
+          ) : null}
+          {filters.jobTrack.length > 0 ? (
+            <span className="rounded-md border border-border bg-card px-2 py-0.5">
+              직군: {filters.jobTrack.join(", ")}
+            </span>
+          ) : null}
+          {filters.title.length > 0 ? (
+            <span className="rounded-md border border-border bg-card px-2 py-0.5">
+              직위: {filters.title.join(", ")}
+            </span>
+          ) : null}
+          <span className="text-muted-foreground">{filtered.length}명</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 px-2"
+            onClick={clearFilters}
+          >
+            전체 보기
+          </Button>
+        </div>
+      ) : null}
+
       <div className="overflow-x-auto">
         <table className="gw-data-table w-full min-w-[900px] text-sm">
           <thead>
-            <tr className="bg-dh-deep text-white">
+            <tr ref={filterMenuRef} className="bg-dh-deep text-white">
               <th className="px-2 py-2">성명</th>
               <th className="px-2 py-2">사번</th>
-              <th className="px-2 py-2">상위부서</th>
-              <th className="px-2 py-2">부서</th>
-              <th className="px-2 py-2">직군</th>
-              <th className="px-2 py-2">직위</th>
+              <HeaderFilter filterKey="division" label="상위부서" />
+              <HeaderFilter filterKey="department" label="부서" />
+              <HeaderFilter filterKey="jobTrack" label="직군" />
+              <HeaderFilter filterKey="title" label="직위" />
               <th className="px-2 py-2">성별</th>
               <th className="px-2 py-2">
                 {kind === "hire" ? "입사일" : "퇴사일"}
@@ -701,7 +949,9 @@ export function StaffMovementsPanel() {
                   colSpan={12}
                   className="px-3 py-8 text-center text-muted-foreground"
                 >
-                  등록된 {kind === "hire" ? "입사" : "퇴사"} 기록이 없습니다.
+                  {hasFilters
+                    ? "선택한 조건에 맞는 기록이 없습니다. 「전체 보기」로 필터를 해제하세요."
+                    : `등록된 ${kind === "hire" ? "입사" : "퇴사"} 기록이 없습니다.`}
                 </td>
               </tr>
             ) : (
