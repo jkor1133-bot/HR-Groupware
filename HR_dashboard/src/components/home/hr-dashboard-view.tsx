@@ -259,7 +259,10 @@ export function HrDashboardView() {
           그룹입사일자: e.groupHireDate,
           입사일자: e.hireDate,
         };
-        if (canViewSalary) row.연봉 = e.salary || "";
+        if (canViewSalary) {
+          row["연봉(전년)"] = e.salary || "";
+          row["계약연봉(당년)"] = e.contractSalary || "";
+        }
         return row;
       }),
       "사원명부_대시보드반영.xlsx",

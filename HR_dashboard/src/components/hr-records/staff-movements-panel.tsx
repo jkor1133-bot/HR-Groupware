@@ -397,6 +397,7 @@ export function StaffMovementsPanel() {
         gender: form.gender,
         titleYears: 1,
         salary: 0,
+        contractSalary: 0,
         groupHireDate: form.eventDate,
         hireDate: form.eventDate,
       };
@@ -418,6 +419,7 @@ export function StaffMovementsPanel() {
           jobRole: existing.jobRole,
           titleYears: existing.titleYears,
           salary: existing.salary,
+          contractSalary: existing.contractSalary,
         });
       } else {
         roster.upsert(rosterItem);

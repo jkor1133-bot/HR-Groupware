@@ -70,6 +70,7 @@ type FormState = {
   gender: string;
   titleYears: string;
   salary: string;
+  contractSalary: string;
   groupHireDate: string;
   hireDate: string;
 };
@@ -116,6 +117,7 @@ function emptyForm(): FormState {
     gender: "남자",
     titleYears: "1",
     salary: "",
+    contractSalary: "",
     groupHireDate: "",
     hireDate: "",
   };
@@ -143,6 +145,9 @@ function toRecord(
     gender: form.gender,
     titleYears: Number(form.titleYears) || 0,
     salary: options?.includeSalary ? parseSalaryInput(form.salary) : 0,
+    contractSalary: options?.includeSalary
+      ? parseSalaryInput(form.contractSalary)
+      : 0,
     groupHireDate: form.groupHireDate,
     hireDate: form.hireDate,
   };
@@ -155,7 +160,7 @@ function excelHeaders(includeSalary: boolean): string[] {
   if (!includeSalary) return [...EMPLOYEE_EXCEL_HEADERS_BASE];
   const headers: string[] = [...EMPLOYEE_EXCEL_HEADERS_BASE];
   const idx = headers.indexOf("직위년차");
-  headers.splice(idx + 1, 0, "연봉");
+  headers.splice(idx + 1, 0, "연봉(전년)", "계약연봉(당년)");
   return headers;
 }
 
@@ -174,23 +179,30 @@ function excelSample(includeSalary: boolean): Record<string, string | number> {
     그룹입사일자: "2020-03-02",
     입사일자: "2020-03-02",
   };
-  if (includeSalary) base.연봉 = 54000000;
+  if (includeSalary) {
+    base["연봉(전년)"] = 54000000;
+    base["계약연봉(당년)"] = 55000000;
+  }
   return base;
 }
 
-function findExistingSalary(
+function findExistingSalaries(
   items: EmployeeRosterRecord[],
   empNo: string,
   name: string,
-) {
+): { salary: number; contractSalary: number } {
   const byNo = empNo
     ? items.find((e) => e.empNo.trim() === empNo.trim())
     : undefined;
-  if (byNo) return byNo.salary || 0;
-  const byName = name
-    ? items.find((e) => e.name.trim() === name.trim())
-    : undefined;
-  return byName?.salary || 0;
+  const hit =
+    byNo ??
+    (name
+      ? items.find((e) => e.name.trim() === name.trim())
+      : undefined);
+  return {
+    salary: hit?.salary || 0,
+    contractSalary: hit?.contractSalary || 0,
+  };
 }
 
 const FILTERABLE: {
@@ -422,7 +434,10 @@ export function EmployeeRosterPanel() {
 
   function patchRow(id: string, next: Partial<EmployeeRosterRecord>) {
     const patch = { ...next };
-    if (!canViewSalary) delete patch.salary;
+    if (!canViewSalary) {
+      delete patch.salary;
+      delete patch.contractSalary;
+    }
     setDraft((prev) => {
       const base = prev ?? cloneItems(list.items);
       return base.map((row) => {
@@ -470,10 +485,25 @@ export function EmployeeRosterPanel() {
         const department = normalizeDepartment(rawDept);
         const empNo = cellStr(row, "사번", "empNo", "사원번호");
         const name = cellStr(row, "성명", "이름", "name");
-        const importedSalary = Math.max(
+        const importedPrev = Math.max(
           0,
-          Math.floor(cellNum(row, "연봉", "연봉(원)", "salary")),
+          Math.floor(
+            cellNum(row, "연봉(전년)", "연봉", "연봉(원)", "salary"),
+          ),
         );
+        const importedContract = Math.max(
+          0,
+          Math.floor(
+            cellNum(
+              row,
+              "계약연봉(당년)",
+              "계약연봉",
+              "당년연봉",
+              "contractSalary",
+            ),
+          ),
+        );
+        const kept = findExistingSalaries(source, empNo, name);
         return {
           id: `${idPrefix}-${Date.now()}-${i}`,
           division,
@@ -486,9 +516,10 @@ export function EmployeeRosterPanel() {
           jobTrack: cellStr(row, "직군", "jobTrack") || "일반직",
           gender: cellStr(row, "성별", "gender") || "남자",
           titleYears: cellTitleYears(row, 1),
-          salary: canViewSalary
-            ? importedSalary
-            : findExistingSalary(source, empNo, name),
+          salary: canViewSalary ? importedPrev : kept.salary,
+          contractSalary: canViewSalary
+            ? importedContract
+            : kept.contractSalary,
           groupHireDate: cellDate(
             row,
             "그룹입사일자",
@@ -581,7 +612,10 @@ export function EmployeeRosterPanel() {
         그룹입사일자: e.groupHireDate,
         입사일자: e.hireDate,
       };
-      if (canViewSalary) row.연봉 = e.salary || "";
+      if (canViewSalary) {
+        row["연봉(전년)"] = e.salary || "";
+        row["계약연봉(당년)"] = e.contractSalary || "";
+      }
       return row;
     });
 
@@ -611,8 +645,8 @@ export function EmployeeRosterPanel() {
             임직원 기본 정보를 등록합니다. 표 헤더(상위부서·부서·직위·직책·직군·성별)는
             여러 값을 골라 필터할 수 있습니다.
             {canViewSalary
-              ? " 연봉은 관리자만 열람·수정할 수 있습니다."
-              : " 연봉은 관리자만 확인할 수 있어 이 화면에는 표시되지 않습니다."}
+              ? " 연봉(전년)·계약연봉(당년)은 관리자만 열람·수정할 수 있습니다."
+              : " 연봉 정보는 관리자만 확인할 수 있어 이 화면에는 표시되지 않습니다."}
           </p>
           {hasActiveFilters ? (
             <p className="mt-1 text-xs font-medium text-dh-real">
@@ -716,8 +750,8 @@ export function EmployeeRosterPanel() {
                 엑셀에서 헤더(상위부서, 부서, 파트, 사번, 성명 …) 포함 범위를
                 복사한 뒤 아래에 Ctrl+V 하세요. 파일 업로드가 막혀도 됩니다.
                 {canViewSalary
-                  ? " 연봉 열은 관리자만 반영됩니다."
-                  : " 연봉은 관리자만 입력·확인할 수 있어 붙여넣기에 포함되지 않습니다."}
+                  ? " 연봉(전년)·계약연봉(당년) 열은 관리자만 반영됩니다."
+                  : " 연봉 정보는 관리자만 입력·확인할 수 있어 붙여넣기에 포함되지 않습니다."}
               </p>
             </div>
             <Button
@@ -737,7 +771,7 @@ export function EmployeeRosterPanel() {
             onChange={(e) => setPasteText(e.target.value)}
             placeholder={
               canViewSalary
-                ? "상위부서\t부서\t파트\t사번\t성명\t직위\t직책\t직군\t성별\t직위년차\t연봉\t그룹입사일자\t입사일자\n경영지원본부\t인사총무팀\t\t20260001\t홍길동\t대리\t팀원\t일반직\t남자\t1\t54000000\t2020-03-02\t2020-03-02"
+                ? "상위부서\t부서\t파트\t사번\t성명\t직위\t직책\t직군\t성별\t직위년차\t연봉(전년)\t계약연봉(당년)\t그룹입사일자\t입사일자\n경영지원본부\t인사총무팀\t\t20260001\t홍길동\t대리\t팀원\t일반직\t남자\t1\t54000000\t55000000\t2020-03-02\t2020-03-02"
                 : "상위부서\t부서\t파트\t사번\t성명\t직위\t직책\t직군\t성별\t직위년차\t그룹입사일자\t입사일자\n경영지원본부\t인사총무팀\t\t20260001\t홍길동\t대리\t팀원\t일반직\t남자\t1\t2020-03-02\t2020-03-02"
             }
             className="min-h-[9rem] font-mono text-xs"
@@ -904,18 +938,32 @@ export function EmployeeRosterPanel() {
           />
         </div>
         {canViewSalary ? (
-          <div className="grid gap-1">
-            <Label>연봉 (원) · 관리자</Label>
-            <Input
-              type="text"
-              inputMode="numeric"
-              value={form.salary}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, salary: e.target.value }))
-              }
-              placeholder="예: 54000000"
-            />
-          </div>
+          <>
+            <div className="grid gap-1">
+              <Label>연봉(전년) · 관리자</Label>
+              <Input
+                type="text"
+                inputMode="numeric"
+                value={form.salary}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, salary: e.target.value }))
+                }
+                placeholder="예: 54000000"
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label>계약연봉(당년) · 관리자</Label>
+              <Input
+                type="text"
+                inputMode="numeric"
+                value={form.contractSalary}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, contractSalary: e.target.value }))
+                }
+                placeholder="예: 55000000"
+              />
+            </div>
+          </>
         ) : null}
         <div className="grid gap-1">
           <Label>그룹입사일자</Label>
@@ -949,7 +997,7 @@ export function EmployeeRosterPanel() {
         <table
           className={cn(
             "gw-data-table w-full text-sm",
-            canViewSalary ? "min-w-[1180px]" : "min-w-[1080px]",
+            canViewSalary ? "min-w-[1320px]" : "min-w-[1080px]",
           )}
         >
           <thead>
@@ -978,7 +1026,12 @@ export function EmployeeRosterPanel() {
                 </th>
               ))}
               <th className="px-2 py-2">직위년차</th>
-              {canViewSalary ? <th className="px-2 py-2">연봉</th> : null}
+              {canViewSalary ? (
+                <>
+                  <th className="px-2 py-2">연봉(전년)</th>
+                  <th className="px-2 py-2">계약연봉(당년)</th>
+                </>
+              ) : null}
               <th className="px-2 py-2">그룹입사</th>
               <th className="px-2 py-2">입사</th>
               <th className="px-2 py-2" />
@@ -988,7 +1041,7 @@ export function EmployeeRosterPanel() {
             {!list.hydrated ? (
               <tr>
                 <td
-                  colSpan={canViewSalary ? 14 : 13}
+                  colSpan={canViewSalary ? 15 : 13}
                   className="px-3 py-8 text-center text-muted-foreground"
                 >
                   불러오는 중…
@@ -997,7 +1050,7 @@ export function EmployeeRosterPanel() {
             ) : displayed.length === 0 ? (
               <tr>
                 <td
-                  colSpan={canViewSalary ? 14 : 13}
+                  colSpan={canViewSalary ? 15 : 13}
                   className="px-3 py-8 text-center text-muted-foreground"
                 >
                   {working.length === 0
@@ -1203,24 +1256,50 @@ export function EmployeeRosterPanel() {
                       )}
                     </td>
                     {canViewSalary ? (
-                      <td className="px-1.5 py-1 tabular-nums">
-                        {editing ? (
-                          <Input
-                            type="text"
-                            inputMode="numeric"
-                            className="h-8 min-w-[7rem] px-2 text-sm"
-                            value={e.salary ? String(e.salary) : ""}
-                            placeholder="원"
-                            onChange={(ev) =>
-                              patchRow(e.id, {
-                                salary: parseSalaryInput(ev.target.value),
-                              })
-                            }
-                          />
-                        ) : (
-                          formatSalaryDisplay(e.salary)
-                        )}
-                      </td>
+                      <>
+                        <td className="px-1.5 py-1 tabular-nums">
+                          {editing ? (
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              className="h-8 min-w-[7rem] px-2 text-sm"
+                              value={e.salary ? String(e.salary) : ""}
+                              placeholder="원"
+                              onChange={(ev) =>
+                                patchRow(e.id, {
+                                  salary: parseSalaryInput(ev.target.value),
+                                })
+                              }
+                            />
+                          ) : (
+                            formatSalaryDisplay(e.salary)
+                          )}
+                        </td>
+                        <td className="px-1.5 py-1 tabular-nums">
+                          {editing ? (
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              className="h-8 min-w-[7rem] px-2 text-sm"
+                              value={
+                                e.contractSalary
+                                  ? String(e.contractSalary)
+                                  : ""
+                              }
+                              placeholder="원"
+                              onChange={(ev) =>
+                                patchRow(e.id, {
+                                  contractSalary: parseSalaryInput(
+                                    ev.target.value,
+                                  ),
+                                })
+                              }
+                            />
+                          ) : (
+                            formatSalaryDisplay(e.contractSalary)
+                          )}
+                        </td>
+                      </>
                     ) : null}
                     <td className="px-1.5 py-1">
                       {editing ? (

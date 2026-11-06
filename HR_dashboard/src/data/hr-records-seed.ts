@@ -1,10 +1,13 @@
 import type {
   AwardRecord,
   CompanyVehicleRecord,
+  CongratulatoryStandardRecord,
   GolfMembershipRecord,
   OverseasTrainingRecord,
   IpAssignmentRecord,
+  PayBandMatrix,
   PcAssignmentRecord,
+  PolicyMemoRecord,
   PromotionRecord,
   QualificationAllowanceRecord,
 } from "@/lib/types";
@@ -60,23 +63,145 @@ export function seedAwards(): AwardRecord[] {
 }
 
 export function seedQualificationAllowances(): QualificationAllowanceRecord[] {
+  return [];
+}
+
+/** 대한싸이로 Pay-Band 매트릭스 (사진 기준 + Max는 차트용 초기값) */
+export function seedPayBandMatrix(): PayBandMatrix {
+  return {
+    company: "대한싸이로",
+    general: [
+      {
+        title: "사원",
+        standardYears: 4,
+        limitYears: 7,
+        minSalary: null,
+        maxSalary: null,
+        promotionBump: null,
+      },
+      {
+        title: "대리",
+        standardYears: 4,
+        limitYears: 7,
+        minSalary: null,
+        maxSalary: null,
+        promotionBump: null,
+      },
+      {
+        title: "과장",
+        standardYears: 6,
+        limitYears: 9,
+        minSalary: null,
+        maxSalary: null,
+        promotionBump: null,
+      },
+      {
+        title: "차장",
+        standardYears: 6,
+        limitYears: 9,
+        minSalary: null,
+        maxSalary: null,
+        promotionBump: null,
+      },
+      {
+        title: "부장",
+        standardYears: null,
+        limitYears: null,
+        minSalary: null,
+        maxSalary: 100_000_000,
+        promotionBump: null,
+      },
+    ],
+    support: [
+      {
+        title: "사원",
+        standardYears: 10,
+        limitYears: 13,
+        minSalary: null,
+        maxSalary: null,
+        promotionBump: null,
+      },
+      {
+        title: "주임",
+        standardYears: 10,
+        limitYears: 13,
+        minSalary: null,
+        maxSalary: null,
+        promotionBump: null,
+      },
+      {
+        title: "대리",
+        standardYears: 10,
+        limitYears: 10,
+        minSalary: null,
+        maxSalary: null,
+        promotionBump: null,
+      },
+    ],
+  };
+}
+
+export function seedGroupExecCongratulatory(): CongratulatoryStandardRecord[] {
   return [
     {
-      id: "qa1",
-      employeeName: "최자격",
-      team: "생산팀",
-      qualification: "위험물기능사",
-      monthlyAmount: 50000,
-      startDate: ymdOffset(-400),
-      note: "",
+      id: "gec1",
+      eventType: "결혼",
+      relation: "본인",
+      amount: 500000,
+      effectiveDate: ymdOffset(-400),
+      note: "그룹사 임원 기준",
     },
     {
-      id: "qa2",
-      employeeName: "정IT",
-      team: "경영지원팀",
-      qualification: "정보처리기사",
-      monthlyAmount: 80000,
-      startDate: ymdOffset(-200),
+      id: "gec2",
+      eventType: "사망",
+      relation: "부모",
+      amount: 1000000,
+      effectiveDate: ymdOffset(-400),
+      note: "",
+    },
+  ];
+}
+
+export function seedStaffCongratulatory(): CongratulatoryStandardRecord[] {
+  return [
+    {
+      id: "sc1",
+      eventType: "결혼",
+      relation: "본인",
+      amount: 300000,
+      effectiveDate: ymdOffset(-400),
+      note: "직원 기준",
+    },
+    {
+      id: "sc2",
+      eventType: "출산",
+      relation: "본인·배우자",
+      amount: 200000,
+      effectiveDate: ymdOffset(-400),
+      note: "",
+    },
+  ];
+}
+
+export function seedGroupExecVehiclePolicy(): PolicyMemoRecord[] {
+  return [
+    {
+      id: "gev1",
+      memoDate: ymdOffset(-200),
+      title: "그룹사 임원 차량 지급 기준 제정",
+      body: "임원 직급별 차량 지급·유지 기준을 정리합니다. 세부 금액·차종은 내부 기준에 따릅니다.",
+      note: "최초 등록",
+    },
+  ];
+}
+
+export function seedCompanyVehiclePolicy(): PolicyMemoRecord[] {
+  return [
+    {
+      id: "cvp1",
+      memoDate: ymdOffset(-150),
+      title: "당사 업무용 차량 지급 기준",
+      body: "업무 필요에 따른 차량 배정·교체 주기·공용 차량 운영 기준을 기록합니다.",
       note: "",
     },
   ];

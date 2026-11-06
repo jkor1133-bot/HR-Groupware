@@ -6,16 +6,21 @@ import { ContractsDbPanel } from "@/components/hr-records/contracts-db-panel";
 import { IpAssignmentsPanel } from "@/components/hr-records/ip-assignments-panel";
 import { PcAssignmentsPanel } from "@/components/hr-records/pc-assignments-panel";
 import { PermitsDbPanel } from "@/components/hr-records/permits-db-panel";
+import { PayBandPanel } from "@/components/hr-records/pay-band-panel";
+import { PolicyMemoPanel } from "@/components/hr-records/policy-memo-panel";
 import { PromotionHistoryPanel } from "@/components/hr-records/promotion-history-panel";
 import { PromotionPointsPanel } from "@/components/hr-records/promotion-points-panel";
 import { SimpleRecordsPanel } from "@/components/hr-records/simple-records-panel";
 import { StaffMovementsPanel } from "@/components/hr-records/staff-movements-panel";
 import {
   seedAwards,
+  seedCompanyVehiclePolicy,
   seedCompanyVehicles,
   seedGolfMemberships,
+  seedGroupExecCongratulatory,
+  seedGroupExecVehiclePolicy,
   seedOverseasTrainings,
-  seedQualificationAllowances,
+  seedStaffCongratulatory,
 } from "@/data/hr-records-seed";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
@@ -25,9 +30,9 @@ import {
 import type {
   AwardRecord,
   CompanyVehicleRecord,
+  CongratulatoryStandardRecord,
   GolfMembershipRecord,
   OverseasTrainingRecord,
-  QualificationAllowanceRecord,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -49,7 +54,7 @@ const SUB_TABS: Record<MainTab, SubTab[]> = {
     { id: "promotions", label: "승진현황" },
     { id: "staff-movements", label: "입퇴사자 현황" },
     { id: "awards", label: "포상현황" },
-    { id: "allowances", label: "자격수당 현황" },
+    { id: "pay-bands", label: "Pay-Band 현황" },
     { id: "contracts", label: "계약직 현황" },
   ],
   ga: [
@@ -57,12 +62,32 @@ const SUB_TABS: Record<MainTab, SubTab[]> = {
     { id: "golf", label: "골프 회원권 현황" },
     { id: "vehicles", label: "업무용 차량 현황" },
     { id: "overseas", label: "해외연수 현황" },
+    { id: "congrats-exec", label: "그룹사 임원 경조사 기준표" },
+    { id: "congrats-staff", label: "직원 경조사 기준표" },
   ],
   it: [
     { id: "pcs", label: "PC 지급 현황" },
     { id: "ips", label: "IP 부여 현황" },
   ],
 };
+
+const CONGRAT_FIELDS = [
+  { key: "eventType", label: "경조사", required: true },
+  { key: "relation", label: "대상·관계", required: true },
+  {
+    key: "amount",
+    label: "지급액(원)",
+    type: "number" as const,
+    required: true,
+  },
+  {
+    key: "effectiveDate",
+    label: "적용일",
+    type: "date" as const,
+    required: true,
+  },
+  { key: "note", label: "비고" },
+];
 
 function PromotionsSection() {
   const [inner, setInner] = useState<"points" | "cumulative" | "history">(
@@ -213,41 +238,8 @@ export function HrRecordsView({
             ]}
           />
         );
-      case "allowances":
-        return (
-          <SimpleRecordsPanel<QualificationAllowanceRecord>
-            title="자격수당 현황"
-            description="자격수당 지급 대상을 등록·관리합니다. 성명은 사원명부에서 선택할 수 있습니다."
-            storageKey="hr-dashboard-qual-allowances-v1"
-            seedFn={seedQualificationAllowances}
-            idPrefix="qa"
-            excelFileName="자격수당현황.xlsx"
-            employeeLink={{ nameKey: "employeeName", teamKey: "team" }}
-            fields={[
-              {
-                key: "employeeName",
-                label: "성명",
-                type: "employee",
-                required: true,
-              },
-              { key: "team", label: "소속", required: true },
-              { key: "qualification", label: "자격", required: true },
-              {
-                key: "monthlyAmount",
-                label: "월수당(원)",
-                type: "number",
-                required: true,
-              },
-              {
-                key: "startDate",
-                label: "시작일",
-                type: "date",
-                required: true,
-              },
-              { key: "note", label: "비고" },
-            ]}
-          />
-        );
+      case "pay-bands":
+        return <PayBandPanel />;
       case "contracts":
       case "contracts-db":
       case "contractors":
@@ -292,33 +284,49 @@ export function HrRecordsView({
         );
       case "vehicles":
         return (
-          <SimpleRecordsPanel<CompanyVehicleRecord>
-            title="업무용 차량 현황"
-            description="업무용 차량 배정 현황을 등록·관리합니다. 사용자는 사원명부에서 선택할 수 있습니다."
-            storageKey="hr-dashboard-vehicles-v1"
-            seedFn={seedCompanyVehicles}
-            idPrefix="cv"
-            excelFileName="업무용차량현황.xlsx"
-            employeeLink={{ nameKey: "assignee", teamKey: "team" }}
-            fields={[
-              { key: "plateNo", label: "차량번호", required: true },
-              { key: "model", label: "차종", required: true },
-              {
-                key: "assignee",
-                label: "사용자",
-                type: "employee",
-                required: true,
-              },
-              { key: "team", label: "소속", required: true },
-              {
-                key: "acquiredDate",
-                label: "취득일",
-                type: "date",
-                required: true,
-              },
-              { key: "note", label: "비고" },
-            ]}
-          />
+          <div className="space-y-4">
+            <SimpleRecordsPanel<CompanyVehicleRecord>
+              title="업무용 차량 현황"
+              description="업무용 차량 배정 현황을 등록·관리합니다. 사용자는 사원명부에서 선택할 수 있습니다."
+              storageKey="hr-dashboard-vehicles-v1"
+              seedFn={seedCompanyVehicles}
+              idPrefix="cv"
+              excelFileName="업무용차량현황.xlsx"
+              employeeLink={{ nameKey: "assignee", teamKey: "team" }}
+              fields={[
+                { key: "plateNo", label: "차량번호", required: true },
+                { key: "model", label: "차종", required: true },
+                {
+                  key: "assignee",
+                  label: "사용자",
+                  type: "employee",
+                  required: true,
+                },
+                { key: "team", label: "소속", required: true },
+                {
+                  key: "acquiredDate",
+                  label: "취득일",
+                  type: "date",
+                  required: true,
+                },
+                { key: "note", label: "비고" },
+              ]}
+            />
+            <PolicyMemoPanel
+              title="그룹사 임원 차량 지급 기준"
+              description="개정·공지 이력을 일자별로 남겨 히스토리를 관리합니다."
+              storageKey="hr-dashboard-vehicle-policy-group-exec-v1"
+              seedFn={seedGroupExecVehiclePolicy}
+              idPrefix="gev"
+            />
+            <PolicyMemoPanel
+              title="당사 차량 지급 기준"
+              description="당사 업무용 차량 지급·운영 기준 변경 이력을 관리합니다."
+              storageKey="hr-dashboard-vehicle-policy-company-v1"
+              seedFn={seedCompanyVehiclePolicy}
+              idPrefix="cvp"
+            />
+          </div>
         );
       case "overseas":
         return (
@@ -349,6 +357,30 @@ export function HrRecordsView({
               { key: "endDate", label: "종료일", type: "date", required: true },
               { key: "note", label: "비고" },
             ]}
+          />
+        );
+      case "congrats-exec":
+        return (
+          <SimpleRecordsPanel<CongratulatoryStandardRecord>
+            title="그룹사 임원 경조사 기준표"
+            description="그룹사 임원 경조사 지급 기준을 등록·관리합니다."
+            storageKey="hr-dashboard-congrats-group-exec-v1"
+            seedFn={seedGroupExecCongratulatory}
+            idPrefix="gec"
+            excelFileName="그룹사임원경조사기준표.xlsx"
+            fields={CONGRAT_FIELDS}
+          />
+        );
+      case "congrats-staff":
+        return (
+          <SimpleRecordsPanel<CongratulatoryStandardRecord>
+            title="직원 경조사 기준표"
+            description="직원 경조사 지급 기준을 등록·관리합니다."
+            storageKey="hr-dashboard-congrats-staff-v1"
+            seedFn={seedStaffCongratulatory}
+            idPrefix="sc"
+            excelFileName="직원경조사기준표.xlsx"
+            fields={CONGRAT_FIELDS}
           />
         );
       case "pcs":

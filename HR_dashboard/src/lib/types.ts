@@ -327,8 +327,10 @@ export type EmployeeRosterRecord = {
   gender: string;
   /** 직위년차 */
   titleYears: number;
-  /** 연봉(원). 0이면 미입력 */
+  /** 연봉(전년, 원). 0이면 미입력 */
   salary: number;
+  /** 계약연봉(당년, 원). 0이면 미입력 */
+  contractSalary: number;
   /** 그룹입사일자 YYYY-MM-DD */
   groupHireDate: string;
   /** 입사일자 YYYY-MM-DD */
@@ -401,7 +403,7 @@ export type AwardRecord = {
   note: string;
 };
 
-/** 인사총무 이력 · 자격수당 */
+/** 인사총무 이력 · 자격수당 (레거시·로컬 데이터 호환용) */
 export type QualificationAllowanceRecord = {
   id: string;
   employeeName: string;
@@ -409,6 +411,70 @@ export type QualificationAllowanceRecord = {
   qualification: string;
   monthlyAmount: number;
   startDate: string;
+  note: string;
+};
+
+/** 인사 · Pay-Band 직군 */
+export type PayBandTrack = "일반직" | "지원직";
+
+/** 직위별 Pay-Band 수치 (빈 값은 null) */
+export type PayBandTitleMetrics = {
+  title: string;
+  /** 표준체류년수 */
+  standardYears: number | null;
+  /** 한계체류년수 */
+  limitYears: number | null;
+  /** Min 직급초임(원) */
+  minSalary: number | null;
+  /**
+   * Max (차트용, 원).
+   * 제도상 직급 상한은 폐지됐지만, 연봉 위치 시각화를 위해 임의 입력.
+   */
+  maxSalary: number | null;
+  /** 승진가급(원) */
+  promotionBump: number | null;
+};
+
+/** 인사 · Pay-Band 현황 (직군별 매트릭스) */
+export type PayBandMatrix = {
+  company: string;
+  general: PayBandTitleMetrics[];
+  support: PayBandTitleMetrics[];
+};
+
+/** @deprecated 이전 개인별 Pay-Band 목록 — 로컬 호환용 */
+export type PayBandRecord = {
+  id: string;
+  employeeName: string;
+  team: string;
+  payBand: string;
+  effectiveDate: string;
+  note: string;
+};
+
+/** 총무 · 경조사 기준표 (그룹사 임원 / 직원) */
+export type CongratulatoryStandardRecord = {
+  id: string;
+  /** 경조사 구분 (결혼, 출산, 사망 등) */
+  eventType: string;
+  /** 대상·관계 (본인, 배우자, 부모 등) */
+  relation: string;
+  /** 지급액(원) */
+  amount: number;
+  /** 적용일 */
+  effectiveDate: string;
+  note: string;
+};
+
+/** 총무 · 차량 지급 기준 메모 히스토리 */
+export type PolicyMemoRecord = {
+  id: string;
+  /** 작성·개정일 */
+  memoDate: string;
+  /** 제목·요약 */
+  title: string;
+  /** 본문 */
+  body: string;
   note: string;
 };
 

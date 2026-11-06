@@ -23,9 +23,12 @@ function parseStoredTitleYears(raw: Record<string, unknown>): number {
   return 1;
 }
 
-function parseStoredSalary(raw: Record<string, unknown>): number {
-  const candidates = [raw.salary, raw["연봉"], raw["연봉(원)"]];
-  for (const c of candidates) {
+function parseMoneyField(
+  raw: Record<string, unknown>,
+  keys: string[],
+): number {
+  for (const key of keys) {
+    const c = raw[key];
     if (c == null || c === "") continue;
     const n =
       typeof c === "number" ? c : Number(String(c).replace(/[,₩원\s]/g, ""));
@@ -52,7 +55,14 @@ function sanitizeEmployee(
     jobTrack: rest.jobTrack ?? "",
     gender: rest.gender ?? "",
     titleYears: parseStoredTitleYears(asRec),
-    salary: parseStoredSalary(asRec),
+    /** 기존 연봉 값은 연봉(전년)으로 유지 */
+    salary: parseMoneyField(asRec, ["salary", "연봉(전년)", "연봉", "연봉(원)"]),
+    contractSalary: parseMoneyField(asRec, [
+      "contractSalary",
+      "계약연봉(당년)",
+      "계약연봉",
+      "당년연봉",
+    ]),
     groupHireDate: rest.groupHireDate ?? "",
     hireDate: rest.hireDate ?? "",
   };
@@ -75,7 +85,9 @@ function loadEmployees(): EmployeeRosterRecord[] {
         typeof rec.titleYears !== "number" ||
         !Number.isFinite(rec.titleYears) ||
         typeof rec.salary !== "number" ||
-        !Number.isFinite(rec.salary)
+        !Number.isFinite(rec.salary) ||
+        typeof rec.contractSalary !== "number" ||
+        !Number.isFinite(rec.contractSalary)
       );
     });
 
