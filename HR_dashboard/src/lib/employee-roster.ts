@@ -10,6 +10,9 @@ export const EMPLOYEE_DIVISIONS = [
   "축산자원사업본부",
 ] as const;
 
+/** 부서 미선택(상위부서만) — 저장값은 빈 문자열, UI 라벨은 「선택 안 함」 */
+export const NO_DEPARTMENT_LABEL = "선택 안 함";
+
 export const EMPLOYEE_DEPARTMENTS = [
   "인사총무팀",
   "재경팀",
@@ -20,6 +23,17 @@ export const EMPLOYEE_DEPARTMENTS = [
   "구매팀",
   "영업팀",
 ] as const;
+
+export function normalizeDepartment(v: string | undefined | null): string {
+  const s = String(v ?? "").trim();
+  if (!s || s === NO_DEPARTMENT_LABEL || s === "부서 없음") return "";
+  return s;
+}
+
+/** 표 표시용 — 미선택이면 작대기 */
+export function formatDepartment(v: string | undefined | null): string {
+  return normalizeDepartment(v) || "—";
+}
 
 export const EMPLOYEE_TITLES = [
   "회장",

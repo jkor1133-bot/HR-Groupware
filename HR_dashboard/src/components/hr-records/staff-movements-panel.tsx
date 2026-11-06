@@ -18,7 +18,6 @@ import { Label } from "@/components/ui/label";
 import { useEmployees } from "@/hooks/use-employees";
 import { useStaffMovements } from "@/hooks/use-staff-movements";
 import {
-  DEPARTMENTS_BY_DIVISION,
   EMPLOYEE_DEPARTMENTS,
   EMPLOYEE_DIVISIONS,
   EMPLOYEE_GENDERS,
@@ -127,12 +126,7 @@ export function StaffMovementsPanel() {
       filters.division.length > 0
         ? [
             ...new Set(
-              filters.division.flatMap(
-                (d) =>
-                  DEPARTMENTS_BY_DIVISION[
-                    d as (typeof EMPLOYEE_DIVISIONS)[number]
-                  ] ?? [],
-              ),
+              filters.division.flatMap((d) => departmentsForDivision(d)),
             ),
           ]
         : [...EMPLOYEE_DEPARTMENTS];
@@ -196,12 +190,7 @@ export function StaffMovementsPanel() {
       const next: MovFilters = { ...prev, [key]: nextVals };
       if (key === "division") {
         const allowed = new Set(
-          nextVals.flatMap(
-            (d) =>
-              DEPARTMENTS_BY_DIVISION[
-                d as (typeof EMPLOYEE_DIVISIONS)[number]
-              ] ?? EMPLOYEE_DEPARTMENTS,
-          ),
+          nextVals.flatMap((d) => departmentsForDivision(d)),
         );
         if (nextVals.length > 0) {
           next.department = prev.department.filter((t) => allowed.has(t));

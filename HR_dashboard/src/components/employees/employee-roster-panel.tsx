@@ -27,7 +27,10 @@ import {
   EMPLOYEE_JOB_TRACKS,
   EMPLOYEE_PARTS,
   EMPLOYEE_TITLES,
+  NO_DEPARTMENT_LABEL,
   departmentsForDivision,
+  formatDepartment,
+  normalizeDepartment,
 } from "@/lib/employee-roster";
 import {
   cellDate,
@@ -130,7 +133,7 @@ function toRecord(
   return {
     id,
     division: form.division,
-    department: form.department,
+    department: normalizeDepartment(form.department),
     part: form.part.trim(),
     empNo: form.empNo.trim(),
     name: form.name.trim(),
@@ -196,7 +199,11 @@ const FILTERABLE: {
   options: readonly string[];
 }[] = [
   { key: "division", label: "상위부서", options: EMPLOYEE_DIVISIONS },
-  { key: "department", label: "부서", options: EMPLOYEE_DEPARTMENTS },
+  {
+    key: "department",
+    label: "부서",
+    options: [...EMPLOYEE_DEPARTMENTS, NO_DEPARTMENT_LABEL],
+  },
   { key: "title", label: "직위", options: EMPLOYEE_TITLES },
   { key: "jobRole", label: "직책", options: EMPLOYEE_JOB_ROLES },
   { key: "jobTrack", label: "직군", options: EMPLOYEE_JOB_TRACKS },
@@ -339,6 +346,11 @@ export function EmployeeRosterPanel() {
       FILTERABLE.every(({ key }) => {
         const selected = filters[key];
         if (!selected.length) return true;
+        if (key === "department") {
+          const dept = normalizeDepartment(row.department);
+          const label = dept || NO_DEPARTMENT_LABEL;
+          return selected.includes(label) || selected.includes(dept);
+        }
         return selected.includes(String(row[key] ?? ""));
       }),
     );
@@ -351,7 +363,12 @@ export function EmployeeRosterPanel() {
   }
 
   function startEdit() {
-    setDraft(cloneItems(list.items));
+    setDraft(
+      cloneItems(list.items).map((r) => ({
+        ...r,
+        department: normalizeDepartment(r.department),
+      })),
+    );
     setEditing(true);
   }
 
@@ -362,7 +379,12 @@ export function EmployeeRosterPanel() {
 
   function saveEdit() {
     if (!draft) return;
-    list.replaceAll(draft);
+    list.replaceAll(
+      draft.map((r) => ({
+        ...r,
+        department: normalizeDepartment(r.department),
+      })),
+    );
     setEditing(false);
     setDraft(null);
     setSavedFlash(true);
@@ -371,13 +393,15 @@ export function EmployeeRosterPanel() {
 
   function setDivision(division: string) {
     const depts = departmentsForDivision(division);
-    setForm((f) => ({
-      ...f,
-      division,
-      department: depts.includes(f.department)
-        ? f.department
-        : (depts[0] ?? ""),
-    }));
+    setForm((f) => {
+      const cur = normalizeDepartment(f.department);
+      return {
+        ...f,
+        division,
+        department:
+          cur === "" || depts.includes(cur) ? cur : (depts[0] ?? ""),
+      };
+    });
   }
 
   function addRow() {
@@ -404,10 +428,16 @@ export function EmployeeRosterPanel() {
       return base.map((row) => {
         if (row.id !== id) return row;
         const merged = { ...row, ...patch };
+        if (patch.department != null) {
+          merged.department = normalizeDepartment(patch.department);
+        }
         if (patch.division && patch.division !== row.division) {
           const depts = departmentsForDivision(patch.division);
-          if (!depts.includes(merged.department)) {
+          const cur = normalizeDepartment(merged.department);
+          if (cur !== "" && !depts.includes(cur)) {
             merged.department = depts[0] ?? "";
+          } else {
+            merged.department = cur;
           }
         }
         return merged;
@@ -436,11 +466,8 @@ export function EmployeeRosterPanel() {
         const division =
           cellStr(row, "상위부서", "본부", "division") ||
           EMPLOYEE_DIVISIONS[1];
-        const depts = departmentsForDivision(division);
-        const department =
-          cellStr(row, "부서", "팀", "department", "소속") ||
-          depts[0] ||
-          "";
+        const rawDept = cellStr(row, "부서", "팀", "department", "소속");
+        const department = normalizeDepartment(rawDept);
         const empNo = cellStr(row, "사번", "empNo", "사원번호");
         const name = cellStr(row, "성명", "이름", "name");
         const importedSalary = Math.max(
@@ -542,7 +569,7 @@ export function EmployeeRosterPanel() {
     const dataRows = displayed.map((e) => {
       const row: Record<string, string | number> = {
         상위부서: e.division,
-        부서: e.department,
+        부서: normalizeDepartment(e.department),
         파트: e.part,
         사번: e.empNo,
         성명: e.name,
@@ -756,11 +783,15 @@ export function EmployeeRosterPanel() {
           <Label>부서</Label>
           <select
             className={selectClass}
-            value={form.department}
+            value={normalizeDepartment(form.department)}
             onChange={(e) =>
-              setForm((f) => ({ ...f, department: e.target.value }))
+              setForm((f) => ({
+                ...f,
+                department: normalizeDepartment(e.target.value),
+              }))
             }
           >
+            <option value="">{NO_DEPARTMENT_LABEL}</option>
             {deptOptions.map((d) => (
               <option key={d} value={d}>
                 {d}
@@ -1002,14 +1033,20 @@ export function EmployeeRosterPanel() {
                       {editing ? (
                         <select
                           className={selectClass}
-                          value={e.department}
+                          value={normalizeDepartment(e.department)}
                           onChange={(ev) =>
                             patchRow(e.id, { department: ev.target.value })
                           }
                         >
-                          {(rowDepts.includes(e.department)
+                          <option value="">{NO_DEPARTMENT_LABEL}</option>
+                          {(rowDepts.includes(normalizeDepartment(e.department))
                             ? rowDepts
-                            : [...rowDepts, e.department]
+                            : [
+                                ...rowDepts,
+                                ...(normalizeDepartment(e.department)
+                                  ? [normalizeDepartment(e.department)]
+                                  : []),
+                              ]
                           ).map((d) => (
                             <option key={d} value={d}>
                               {d}
@@ -1017,7 +1054,7 @@ export function EmployeeRosterPanel() {
                           ))}
                         </select>
                       ) : (
-                        e.department
+                        formatDepartment(e.department)
                       )}
                     </td>
                     <td className="px-1.5 py-1">
