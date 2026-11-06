@@ -307,15 +307,23 @@ export function ScheduleOverview() {
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="gw-data-table w-full min-w-[560px] text-sm">
+      <div className="overflow-x-auto px-5 pb-4 pt-1 sm:px-6">
+        <table className="gw-data-table w-full min-w-[720px] table-fixed text-sm">
+          {/* 날짜 · 업무 · 담당 · 상태 · 카테고리 비율 */}
+          <colgroup>
+            <col className="w-[20%]" />
+            <col className="w-[50%]" />
+            <col className="w-[10%]" />
+            <col className="w-[10%]" />
+            <col className="w-[10%]" />
+          </colgroup>
           <thead>
             <tr className="bg-muted/60 text-xs text-muted-foreground">
-              <th className="px-4 py-2.5 font-medium sm:px-5">날짜</th>
-              <th className="px-4 py-2.5 text-left font-medium">업무</th>
-              <th className="px-4 py-2.5 font-medium">담당</th>
-              <th className="px-4 py-2.5 font-medium">상태</th>
-              <th className="px-4 py-2.5 font-medium sm:px-5">카테고리</th>
+              <th className="px-3 py-2.5 text-center font-medium">날짜</th>
+              <th className="px-3 py-2.5 text-center font-medium">업무</th>
+              <th className="px-3 py-2.5 text-center font-medium">담당</th>
+              <th className="px-3 py-2.5 text-center font-medium">상태</th>
+              <th className="px-3 py-2.5 text-center font-medium">카테고리</th>
             </tr>
           </thead>
           <tbody>
@@ -360,14 +368,14 @@ export function ScheduleOverview() {
                         i % 2 === 1 && "bg-muted/30",
                       )}
                     >
-                      <td className="px-4 py-2.5 whitespace-nowrap text-muted-foreground sm:px-5">
+                      <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">
                         {date}
                         <span className="ml-1 text-xs">({task.dueDay})</span>
                       </td>
-                      <td className="px-4 py-2.5 text-left">
+                      <td className="px-3 py-2.5 text-left">
                         <button
                           type="button"
-                          className="group flex w-full items-start gap-1 text-left"
+                          className="group flex w-full items-start gap-1.5 text-left"
                           onClick={() =>
                             setExpandedId(expanded ? null : task.id)
                           }
@@ -401,13 +409,13 @@ export function ScheduleOverview() {
                           </span>
                         </button>
                       </td>
-                      <td className="px-4 py-2.5 whitespace-nowrap">
+                      <td className="whitespace-nowrap px-3 py-2.5">
                         {owner?.name ?? "미지정"}
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="whitespace-nowrap px-3 py-2.5">
                         <StatusBadge status={task.status} />
                       </td>
-                      <td className="px-4 py-2.5 text-muted-foreground sm:px-5">
+                      <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">
                         {task.category}
                       </td>
                     </tr>

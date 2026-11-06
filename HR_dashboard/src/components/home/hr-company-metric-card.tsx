@@ -21,7 +21,7 @@ function DiffLine({ value, unit }: { value: number; unit: Unit }) {
   return (
     <p
       className={cn(
-        "mt-1 flex items-center gap-1 text-xs font-medium tabular-nums",
+        "mt-1 flex items-center gap-1 text-sm font-medium tabular-nums",
         neg && "text-dh-red",
         pos && "text-dh-real",
         !neg && !pos && "text-muted-foreground",
@@ -46,23 +46,23 @@ function SliceColumn({
   const negActual = slice.actual < 0;
   return (
     <div className="min-w-0 flex-1">
-      <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+      <p className="text-sm font-medium text-muted-foreground">{label}</p>
       <p
         className={cn(
-          "mt-1 font-heading text-2xl font-bold tabular-nums tracking-tight sm:text-[1.65rem]",
+          "mt-1 font-heading text-3xl font-bold tabular-nums tracking-tight sm:text-[1.85rem]",
           negActual ? "text-dh-red" : "text-dh-deep dark:text-dh-light",
         )}
       >
         {formatValue(slice.actual, unit)}
       </p>
-      <p className="mt-2 text-xs text-muted-foreground">
+      <p className="mt-2 text-sm text-muted-foreground">
         계획{" "}
         <span className="tabular-nums text-foreground/80">
           {formatValue(slice.plan, unit)}
         </span>
       </p>
       <DiffLine value={slice.diff} unit={unit} />
-      <p className="mt-1 text-xs text-muted-foreground">
+      <p className="mt-1 text-sm text-muted-foreground">
         달성률{" "}
         <span className="font-medium tabular-nums text-foreground">
           {formatRate(slice.rate)}
@@ -109,11 +109,11 @@ export function HrCompanyMetricCard({
           >
             <Icon className="size-4" />
           </span>
-          <h3 className="font-heading text-sm font-semibold text-dh-deep dark:text-dh-light">
+          <h3 className="font-heading text-base font-semibold text-dh-deep dark:text-dh-light">
             {title}
           </h3>
         </div>
-        <span className="shrink-0 text-[11px] text-muted-foreground">
+        <span className="shrink-0 text-sm text-muted-foreground">
           {unitLabel}
         </span>
       </div>

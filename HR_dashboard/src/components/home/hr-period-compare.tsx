@@ -28,7 +28,7 @@ function DiffCell({ value, unit }: { value: number; unit: Unit }) {
   return (
     <td
       className={cn(
-        "px-2 py-1.5 text-center tabular-nums",
+        "px-2.5 py-2 text-center tabular-nums",
         neg && "text-dh-red",
         pos && "text-dh-real",
       )}
@@ -43,7 +43,7 @@ function RateCell({ rate }: { rate: number | null }) {
   return (
     <td
       className={cn(
-        "px-2 py-1.5 text-center tabular-nums",
+        "px-2.5 py-2 text-center tabular-nums",
         neg && "text-dh-red",
       )}
     >
@@ -72,7 +72,7 @@ function ModeTabs({
           type="button"
           onClick={() => onChange(id)}
           className={cn(
-            "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+            "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
             mode === id
               ? "bg-dh-sky/30 text-dh-deep shadow-sm dark:bg-dh-real dark:text-dh-light"
               : "text-muted-foreground hover:text-foreground",
@@ -123,9 +123,9 @@ function ExpandLabel({
       )}
     >
       {expanded ? (
-        <ChevronDown className="size-3.5 shrink-0" />
+        <ChevronDown className="size-4 shrink-0" />
       ) : (
-        <ChevronRight className="size-3.5 shrink-0" />
+        <ChevronRight className="size-4 shrink-0" />
       )}
       {label}
     </button>
@@ -158,14 +158,14 @@ function PlanDiffTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="gw-data-table w-full min-w-[420px] text-xs">
+      <table className="gw-data-table w-full min-w-[420px] text-sm">
         <thead>
           <tr className="border-b border-border bg-muted/50 text-muted-foreground">
-            <th className="px-2 py-2 font-medium">구분</th>
-            <th className="px-2 py-2 font-medium">계획</th>
-            <th className="px-2 py-2 font-medium">실적</th>
-            <th className="px-2 py-2 font-medium">차이</th>
-            <th className="px-2 py-2 font-medium">달성률</th>
+            <th className="px-2.5 py-2.5 font-medium">구분</th>
+            <th className="px-2.5 py-2.5 font-medium">계획</th>
+            <th className="px-2.5 py-2.5 font-medium">실적</th>
+            <th className="px-2.5 py-2.5 font-medium">차이</th>
+            <th className="px-2.5 py-2.5 font-medium">달성률</th>
           </tr>
         </thead>
         <tbody>
@@ -178,7 +178,7 @@ function PlanDiffTable({
             return (
               <FragmentRows key={r.team}>
                 <tr className="border-b border-border/60">
-                  <td className="px-2 py-1.5 text-foreground">
+                  <td className="px-2.5 py-2 text-foreground">
                     {expandable ? (
                       <ExpandLabel
                         expanded={teamOpen}
@@ -189,10 +189,10 @@ function PlanDiffTable({
                       r.team
                     )}
                   </td>
-                  <td className="px-2 py-1.5 tabular-nums">
+                  <td className="px-2.5 py-2 tabular-nums">
                     {fmt(r.plan, unit)}
                   </td>
-                  <td className="px-2 py-1.5 tabular-nums">
+                  <td className="px-2.5 py-2 tabular-nums">
                     {fmt(r.actual, unit)}
                   </td>
                   <DiffCell value={r.diff} unit={unit} />
@@ -204,13 +204,13 @@ function PlanDiffTable({
                         key={`${r.team}-${d.key}`}
                         className="border-b border-border/30 bg-muted/15"
                       >
-                        <td className="px-2 py-1 pl-8 text-muted-foreground">
+                        <td className="px-2.5 py-1.5 pl-8 text-muted-foreground">
                           {d.label}
                         </td>
-                        <td className="px-2 py-1 tabular-nums">
+                        <td className="px-2.5 py-1.5 tabular-nums">
                           {fmt(d.plan, unit)}
                         </td>
-                        <td className="px-2 py-1 tabular-nums">
+                        <td className="px-2.5 py-1.5 tabular-nums">
                           {fmt(d.actual, unit)}
                         </td>
                         <DiffCell value={d.diff} unit={unit} />
@@ -227,7 +227,7 @@ function PlanDiffTable({
                       return (
                         <FragmentRows key={partKey}>
                           <tr className="border-b border-border/40 bg-muted/20">
-                            <td className="px-2 py-1.5 pl-5 text-muted-foreground">
+                            <td className="px-2.5 py-2 pl-5 text-muted-foreground">
                               {canExpandPart ? (
                                 <ExpandLabel
                                   expanded={partOpen}
@@ -239,10 +239,10 @@ function PlanDiffTable({
                                 <span className="pl-4">{p.part}</span>
                               )}
                             </td>
-                            <td className="px-2 py-1.5 tabular-nums">
+                            <td className="px-2.5 py-2 tabular-nums">
                               {fmt(p.plan, unit)}
                             </td>
-                            <td className="px-2 py-1.5 tabular-nums">
+                            <td className="px-2.5 py-2 tabular-nums">
                               {fmt(p.actual, unit)}
                             </td>
                             <DiffCell value={p.diff} unit={unit} />
@@ -254,13 +254,13 @@ function PlanDiffTable({
                                   key={`${partKey}-${d.key}`}
                                   className="border-b border-border/30 bg-muted/10"
                                 >
-                                  <td className="px-2 py-1 pl-12 text-muted-foreground">
+                                  <td className="px-2.5 py-1.5 pl-12 text-muted-foreground">
                                     {d.label}
                                   </td>
-                                  <td className="px-2 py-1 tabular-nums">
+                                  <td className="px-2.5 py-1.5 tabular-nums">
                                     {fmt(d.plan, unit)}
                                   </td>
-                                  <td className="px-2 py-1 tabular-nums">
+                                  <td className="px-2.5 py-1.5 tabular-nums">
                                     {fmt(d.actual, unit)}
                                   </td>
                                   <DiffCell value={d.diff} unit={unit} />
@@ -278,11 +278,11 @@ function PlanDiffTable({
         </tbody>
         <tfoot>
           <tr className="border-t border-border font-semibold text-dh-deep dark:text-dh-light">
-            <td className="px-2 py-2">합계</td>
-            <td className="px-2 py-2 tabular-nums">
+            <td className="px-2.5 py-2.5">합계</td>
+            <td className="px-2.5 py-2.5 tabular-nums">
               {fmt(totals.plan, unit)}
             </td>
-            <td className="px-2 py-2 tabular-nums">
+            <td className="px-2.5 py-2.5 tabular-nums">
               {fmt(totals.actual, unit)}
             </td>
             <DiffCell value={totals.diff} unit={unit} />
@@ -320,14 +320,14 @@ function YoYTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="gw-data-table w-full min-w-[420px] text-xs">
+      <table className="gw-data-table w-full min-w-[420px] text-sm">
         <thead>
           <tr className="border-b border-border bg-muted/50 text-muted-foreground">
-            <th className="px-2 py-2 font-medium">구분</th>
-            <th className="px-2 py-2 font-medium">전년실적</th>
-            <th className="px-2 py-2 font-medium">금년실적</th>
-            <th className="px-2 py-2 font-medium">차이</th>
-            <th className="px-2 py-2 font-medium">증감률</th>
+            <th className="px-2.5 py-2.5 font-medium">구분</th>
+            <th className="px-2.5 py-2.5 font-medium">전년실적</th>
+            <th className="px-2.5 py-2.5 font-medium">금년실적</th>
+            <th className="px-2.5 py-2.5 font-medium">차이</th>
+            <th className="px-2.5 py-2.5 font-medium">증감률</th>
           </tr>
         </thead>
         <tbody>
@@ -340,7 +340,7 @@ function YoYTable({
             return (
               <FragmentRows key={r.team}>
                 <tr className="border-b border-border/60">
-                  <td className="px-2 py-1.5 text-foreground">
+                  <td className="px-2.5 py-2 text-foreground">
                     {expandable ? (
                       <ExpandLabel
                         expanded={teamOpen}
@@ -351,10 +351,10 @@ function YoYTable({
                       r.team
                     )}
                   </td>
-                  <td className="px-2 py-1.5 tabular-nums">
+                  <td className="px-2.5 py-2 tabular-nums">
                     {fmt(r.prev, unit)}
                   </td>
-                  <td className="px-2 py-1.5 tabular-nums">
+                  <td className="px-2.5 py-2 tabular-nums">
                     {fmt(r.curr, unit)}
                   </td>
                   <DiffCell value={r.diff} unit={unit} />
@@ -366,13 +366,13 @@ function YoYTable({
                         key={`${r.team}-${d.key}`}
                         className="border-b border-border/30 bg-muted/15"
                       >
-                        <td className="px-2 py-1 pl-8 text-muted-foreground">
+                        <td className="px-2.5 py-1.5 pl-8 text-muted-foreground">
                           {d.label}
                         </td>
-                        <td className="px-2 py-1 tabular-nums">
+                        <td className="px-2.5 py-1.5 tabular-nums">
                           {fmt(d.prev, unit)}
                         </td>
-                        <td className="px-2 py-1 tabular-nums">
+                        <td className="px-2.5 py-1.5 tabular-nums">
                           {fmt(d.curr, unit)}
                         </td>
                         <DiffCell value={d.diff} unit={unit} />
@@ -389,7 +389,7 @@ function YoYTable({
                       return (
                         <FragmentRows key={partKey}>
                           <tr className="border-b border-border/40 bg-muted/20">
-                            <td className="px-2 py-1.5 pl-5 text-muted-foreground">
+                            <td className="px-2.5 py-2 pl-5 text-muted-foreground">
                               {canExpandPart ? (
                                 <ExpandLabel
                                   expanded={partOpen}
@@ -401,10 +401,10 @@ function YoYTable({
                                 <span className="pl-4">{p.part}</span>
                               )}
                             </td>
-                            <td className="px-2 py-1.5 tabular-nums">
+                            <td className="px-2.5 py-2 tabular-nums">
                               {fmt(p.prev, unit)}
                             </td>
-                            <td className="px-2 py-1.5 tabular-nums">
+                            <td className="px-2.5 py-2 tabular-nums">
                               {fmt(p.curr, unit)}
                             </td>
                             <DiffCell value={p.diff} unit={unit} />
@@ -416,13 +416,13 @@ function YoYTable({
                                   key={`${partKey}-${d.key}`}
                                   className="border-b border-border/30 bg-muted/10"
                                 >
-                                  <td className="px-2 py-1 pl-12 text-muted-foreground">
+                                  <td className="px-2.5 py-1.5 pl-12 text-muted-foreground">
                                     {d.label}
                                   </td>
-                                  <td className="px-2 py-1 tabular-nums">
+                                  <td className="px-2.5 py-1.5 tabular-nums">
                                     {fmt(d.prev, unit)}
                                   </td>
-                                  <td className="px-2 py-1 tabular-nums">
+                                  <td className="px-2.5 py-1.5 tabular-nums">
                                     {fmt(d.curr, unit)}
                                   </td>
                                   <DiffCell value={d.diff} unit={unit} />
@@ -440,11 +440,11 @@ function YoYTable({
         </tbody>
         <tfoot>
           <tr className="border-t border-border font-semibold text-dh-deep dark:text-dh-light">
-            <td className="px-2 py-2">합계</td>
-            <td className="px-2 py-2 tabular-nums">
+            <td className="px-2.5 py-2.5">합계</td>
+            <td className="px-2.5 py-2.5 tabular-nums">
               {fmt(totals.prev, unit)}
             </td>
-            <td className="px-2 py-2 tabular-nums">
+            <td className="px-2.5 py-2.5 tabular-nums">
               {fmt(totals.curr, unit)}
             </td>
             <DiffCell value={totals.diff} unit={unit} />
@@ -477,11 +477,11 @@ function CompareCard({
     <section className="flex min-h-0 flex-col rounded-xl border border-border bg-card shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border px-4 py-3">
         <div className="min-w-0">
-          <p className="text-[11px] text-muted-foreground">{eyebrow}</p>
-          <h3 className="font-heading text-base font-semibold text-dh-deep dark:text-dh-light">
+          <p className="text-sm text-muted-foreground">{eyebrow}</p>
+          <h3 className="font-heading text-lg font-semibold text-dh-deep dark:text-dh-light">
             {title}
           </h3>
-          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-muted-foreground">
             <span>{periodLabel(mode, asOf)}</span>
             <span>{unitLabel}</span>
           </div>
@@ -529,7 +529,7 @@ export function HrPeriodCompareBlock({
 
   return (
     <div className="space-y-2">
-      <p className="text-sm font-semibold text-dh-deep dark:text-dh-light">
+      <p className="text-base font-semibold text-dh-deep dark:text-dh-light">
         {topic}
       </p>
       <div className="grid gap-3 @md/app:grid-cols-2">

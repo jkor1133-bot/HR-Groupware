@@ -356,14 +356,14 @@ export function HrDashboardView() {
         return (
           <div className="space-y-3">
             <div className="flex flex-wrap items-end justify-between gap-2">
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 인건비·근무시간 기준월:{" "}
                 <span className="font-medium text-foreground">
                   {metricMonth.replace("-", "년 ")}월
                 </span>
                 {" · "}당월/누계는 이 연월 기준
               </p>
-              <label className="grid gap-1 text-xs">
+              <label className="grid gap-1 text-sm">
                 <span className="text-muted-foreground">기준 연월</span>
                 <input
                   type="month"

@@ -183,16 +183,21 @@ export function CalendarPanel() {
           </button>
         </div>
 
-        <div className="grid grid-cols-7 text-center text-xs text-muted-foreground">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border">
+        <div className="grid grid-cols-7 border-b border-border bg-muted/20 text-center text-xs text-muted-foreground">
           {WEEKDAYS.map((d) => (
-            <div key={d} className="py-1.5 font-medium">
+            <div
+              key={d}
+              className="border-r border-border py-1.5 font-medium last:border-r-0"
+            >
               {d}
             </div>
           ))}
         </div>
 
-        <div className="grid min-h-[26rem] flex-1 grid-cols-7 grid-rows-6 gap-px overflow-hidden rounded-md border border-border bg-border @lg/app:min-h-[28rem]">
-          {days.map((d) => {
+        {/* gap-px는 100% 배율에서 서브픽셀로 선이 사라질 수 있어 cell border 사용 */}
+        <div className="grid min-h-[26rem] flex-1 grid-cols-7 grid-rows-6 bg-card @lg/app:min-h-[28rem]">
+          {days.map((d, i) => {
             const ymd = formatYmd(d);
             const inMonth = d.getMonth() === month;
             const isSelected = ymd === selected;
@@ -211,6 +216,8 @@ export function CalendarPanel() {
               deadlines.length -
               deadlineShow.length +
               (list.length - eventShow.length);
+            const isLastCol = (i + 1) % 7 === 0;
+            const isLastRow = i >= 35;
             return (
               <div
                 key={ymd}
@@ -223,6 +230,9 @@ export function CalendarPanel() {
                 }}
                 className={cn(
                   "flex min-h-0 flex-col bg-card p-1.5 text-left transition sm:p-2",
+                  "border-border",
+                  !isLastCol && "border-r",
+                  !isLastRow && "border-b",
                   !inMonth && "bg-muted/40 text-muted-foreground/50",
                   isSelected && "ring-1 ring-inset ring-dh-real",
                   inMonth && "hover:bg-muted/30",
@@ -301,6 +311,7 @@ export function CalendarPanel() {
               </div>
             );
           })}
+        </div>
         </div>
       </div>
 

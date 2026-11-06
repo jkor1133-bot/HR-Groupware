@@ -6,7 +6,9 @@ import { ContractsDbPanel } from "@/components/hr-records/contracts-db-panel";
 import { IpAssignmentsPanel } from "@/components/hr-records/ip-assignments-panel";
 import { PcAssignmentsPanel } from "@/components/hr-records/pc-assignments-panel";
 import { PermitsDbPanel } from "@/components/hr-records/permits-db-panel";
+import { CongratulatoryPolicyPanel } from "@/components/hr-records/congratulatory-policy-panel";
 import { PayBandPanel } from "@/components/hr-records/pay-band-panel";
+import { StaffCongratulatoryPolicyPanel } from "@/components/hr-records/staff-congratulatory-policy-panel";
 import { PolicyMemoPanel } from "@/components/hr-records/policy-memo-panel";
 import { PromotionHistoryPanel } from "@/components/hr-records/promotion-history-panel";
 import { PromotionPointsPanel } from "@/components/hr-records/promotion-points-panel";
@@ -17,10 +19,8 @@ import {
   seedCompanyVehiclePolicy,
   seedCompanyVehicles,
   seedGolfMemberships,
-  seedGroupExecCongratulatory,
   seedGroupExecVehiclePolicy,
   seedOverseasTrainings,
-  seedStaffCongratulatory,
 } from "@/data/hr-records-seed";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
@@ -30,7 +30,6 @@ import {
 import type {
   AwardRecord,
   CompanyVehicleRecord,
-  CongratulatoryStandardRecord,
   GolfMembershipRecord,
   OverseasTrainingRecord,
 } from "@/lib/types";
@@ -53,15 +52,15 @@ const SUB_TABS: Record<MainTab, SubTab[]> = {
   hr: [
     { id: "promotions", label: "승진현황" },
     { id: "staff-movements", label: "입퇴사자 현황" },
-    { id: "awards", label: "포상현황" },
     { id: "pay-bands", label: "Pay-Band 현황" },
     { id: "contracts", label: "계약직 현황" },
   ],
   ga: [
+    { id: "overseas", label: "해외연수 현황" },
+    { id: "awards", label: "포상현황" },
     { id: "permits", label: "인허가 현황" },
     { id: "golf", label: "골프 회원권 현황" },
     { id: "vehicles", label: "업무용 차량 현황" },
-    { id: "overseas", label: "해외연수 현황" },
     { id: "congrats-exec", label: "그룹사 임원 경조사 기준표" },
     { id: "congrats-staff", label: "직원 경조사 기준표" },
   ],
@@ -70,24 +69,6 @@ const SUB_TABS: Record<MainTab, SubTab[]> = {
     { id: "ips", label: "IP 부여 현황" },
   ],
 };
-
-const CONGRAT_FIELDS = [
-  { key: "eventType", label: "경조사", required: true },
-  { key: "relation", label: "대상·관계", required: true },
-  {
-    key: "amount",
-    label: "지급액(원)",
-    type: "number" as const,
-    required: true,
-  },
-  {
-    key: "effectiveDate",
-    label: "적용일",
-    type: "date" as const,
-    required: true,
-  },
-  { key: "note", label: "비고" },
-];
 
 function PromotionsSection() {
   const [inner, setInner] = useState<"points" | "cumulative" | "history">(
@@ -360,29 +341,9 @@ export function HrRecordsView({
           />
         );
       case "congrats-exec":
-        return (
-          <SimpleRecordsPanel<CongratulatoryStandardRecord>
-            title="그룹사 임원 경조사 기준표"
-            description="그룹사 임원 경조사 지급 기준을 등록·관리합니다."
-            storageKey="hr-dashboard-congrats-group-exec-v1"
-            seedFn={seedGroupExecCongratulatory}
-            idPrefix="gec"
-            excelFileName="그룹사임원경조사기준표.xlsx"
-            fields={CONGRAT_FIELDS}
-          />
-        );
+        return <CongratulatoryPolicyPanel />;
       case "congrats-staff":
-        return (
-          <SimpleRecordsPanel<CongratulatoryStandardRecord>
-            title="직원 경조사 기준표"
-            description="직원 경조사 지급 기준을 등록·관리합니다."
-            storageKey="hr-dashboard-congrats-staff-v1"
-            seedFn={seedStaffCongratulatory}
-            idPrefix="sc"
-            excelFileName="직원경조사기준표.xlsx"
-            fields={CONGRAT_FIELDS}
-          />
-        );
+        return <StaffCongratulatoryPolicyPanel />;
       case "pcs":
         return <PcAssignmentsPanel />;
       case "ips":

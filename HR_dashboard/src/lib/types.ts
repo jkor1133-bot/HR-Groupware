@@ -466,6 +466,71 @@ export type CongratulatoryStandardRecord = {
   note: string;
 };
 
+/** 그룹사 임원 경조사 기준표 한 행 (단위: 만원, 빈칸·300(500) 문자열) */
+export type CongratPolicyRow = {
+  id: string;
+  group: string;
+  groupSpan: number;
+  target: string;
+  congChair: string;
+  congCeo: string;
+  condChair: string;
+  condCeo: string;
+};
+
+/** 기준표 스냅샷 1건 (현행 또는 이력) */
+export type CongratPolicySnapshot = {
+  id: string;
+  /** 시행일 YYYY-MM-DD */
+  effectiveDate: string;
+  /** 변경·개정 사유 */
+  note: string;
+  description: string;
+  companyFootnote: string;
+  companyRows: CongratPolicyRow[];
+  affiliateRows: CongratPolicyRow[];
+  /** 이력으로 보관된 시각 ISO */
+  archivedAt?: string;
+};
+
+/** localStorage: 현행 + 변경 이력 */
+export type CongratPolicyStore = {
+  current: CongratPolicySnapshot;
+  history: CongratPolicySnapshot[];
+};
+
+/** 직원 경조사 기준표 한 행 */
+export type StaffCongratPolicyRow = {
+  id: string;
+  /** 결혼·사망·출산 등 */
+  category: string;
+  categorySpan: number;
+  target: string;
+  /** 경조금 (원, 표시용 문자열) */
+  allowance: string;
+  /** 휴가일 */
+  leaveDays: string;
+  /** 경조화환 O 또는 빈칸 */
+  wreath: string;
+  /** 상조용품 O 또는 빈칸 */
+  funeralGoods: string;
+  note: string;
+};
+
+export type StaffCongratPolicySnapshot = {
+  id: string;
+  effectiveDate: string;
+  note: string;
+  description: string;
+  rows: StaffCongratPolicyRow[];
+  archivedAt?: string;
+};
+
+export type StaffCongratPolicyStore = {
+  current: StaffCongratPolicySnapshot;
+  history: StaffCongratPolicySnapshot[];
+};
+
 /** 총무 · 차량 지급 기준 메모 히스토리 */
 export type PolicyMemoRecord = {
   id: string;
