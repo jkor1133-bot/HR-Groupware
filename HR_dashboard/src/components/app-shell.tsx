@@ -85,7 +85,7 @@ function SidebarLabel({
   return (
     <span
       className={cn(
-        "min-w-0 flex-1 truncate whitespace-nowrap opacity-0 transition-[opacity,max-width] duration-150 max-w-0 overflow-hidden group-hover/sidebar:max-w-[9rem] group-hover/sidebar:opacity-100",
+        "min-w-0 truncate whitespace-nowrap opacity-0 transition-opacity duration-150 w-0 overflow-hidden group-hover/sidebar:w-auto group-hover/sidebar:flex-1 group-hover/sidebar:opacity-100",
         className,
       )}
     >
@@ -93,6 +93,10 @@ function SidebarLabel({
     </span>
   );
 }
+
+/** 접힌 상태에서도 아이콘 X축이 같아지도록 왼쪽 고정 */
+const SIDEBAR_ITEM =
+  "flex w-full items-center justify-start gap-2.5 rounded-lg px-2.5 py-2.5 text-left text-[15px] font-medium transition";
 
 function MenuLink({
   item,
@@ -135,14 +139,14 @@ function MenuLink({
       aria-label={item.label}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex w-full items-center justify-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] font-medium transition group-hover/sidebar:justify-start",
-        nested && "group-hover/sidebar:pl-3",
+        SIDEBAR_ITEM,
+        nested && "group-hover/sidebar:pl-4",
         active
           ? "bg-white/15 text-white"
           : "text-white/70 hover:bg-white/10 hover:text-white",
       )}
     >
-      <Icon className="size-4 shrink-0" strokeWidth={1.75} />
+      <Icon className="size-5 shrink-0" strokeWidth={1.75} />
       <SidebarLabel>{item.label}</SidebarLabel>
     </Link>
   );
@@ -359,23 +363,24 @@ function SidebarGroupNav({
         aria-expanded={open}
         title={group.label}
         className={cn(
-          "flex w-full items-center justify-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] font-semibold transition group-hover/sidebar:justify-start",
+          SIDEBAR_ITEM,
+          "font-semibold",
           active || open
             ? "bg-white/10 text-white"
             : "text-white/75 hover:bg-white/10 hover:text-white",
         )}
       >
-        <GroupIcon className="size-4 shrink-0" strokeWidth={1.75} />
+        <GroupIcon className="size-5 shrink-0" strokeWidth={1.75} />
         <SidebarLabel>{group.label}</SidebarLabel>
         <ChevronDown
           className={cn(
-            "size-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-150 group-hover/sidebar:opacity-70",
+            "ml-auto hidden size-4 shrink-0 opacity-70 transition-transform duration-150 group-hover/sidebar:block",
             open && "rotate-180",
           )}
         />
       </button>
       {open ? (
-        <div className="flex flex-col gap-0.5 group-hover/sidebar:ml-2 group-hover/sidebar:border-l group-hover/sidebar:border-white/15 group-hover/sidebar:pl-1.5">
+        <div className="flex flex-col gap-0.5 group-hover/sidebar:ml-2 group-hover/sidebar:border-l group-hover/sidebar:border-white/15 group-hover/sidebar:pl-1">
           {group.menus.map((item) => (
             <MenuLink
               key={item.href}
@@ -600,7 +605,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-h-0 flex-1">
         <aside
-          className="group/sidebar sticky top-14 z-30 flex h-[calc(100vh-3.5rem)] w-14 shrink-0 flex-col overflow-x-hidden bg-dh-deep py-3 transition-[width] duration-200 ease-out hover:w-[11.5rem] sm:top-16 sm:h-[calc(100vh-4rem)] sm:w-16 sm:hover:w-48"
+          className="group/sidebar sticky top-14 z-30 flex h-[calc(100vh-3.5rem)] w-16 shrink-0 flex-col overflow-x-hidden bg-dh-deep py-3 transition-[width] duration-200 ease-out hover:w-52 sm:top-16 sm:h-[calc(100vh-4rem)] sm:w-[4.25rem] sm:hover:w-56"
         >
           <nav className="flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden">
             {mainGroups.map((group, groupIndex) => (
@@ -644,13 +649,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   pathname.startsWith("/settings") ? "page" : undefined
                 }
                 className={cn(
-                  "flex w-full items-center justify-center gap-2 rounded-lg px-2 py-2 text-[13px] font-medium transition group-hover/sidebar:justify-start",
+                  SIDEBAR_ITEM,
                   pathname.startsWith("/settings")
                     ? "bg-white/15 text-white"
                     : "text-white/70 hover:bg-white/10 hover:text-white",
                 )}
               >
-                <Settings2 className="size-4 shrink-0" strokeWidth={1.75} />
+                <Settings2 className="size-5 shrink-0" strokeWidth={1.75} />
                 <SidebarLabel>설정</SidebarLabel>
               </Link>
             </div>
