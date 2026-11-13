@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   ChevronDown,
   ClipboardPaste,
   Download,
@@ -103,6 +106,128 @@ const EMPTY_FILTERS: FiltersState = {
   jobTrack: [],
   gender: [],
 };
+
+type SortKey =
+  | "division"
+  | "department"
+  | "part"
+  | "empNo"
+  | "name"
+  | "title"
+  | "jobRole"
+  | "jobTrack"
+  | "gender"
+  | "titleYears"
+  | "salary"
+  | "contractSalary"
+  | "groupHireDate"
+  | "hireDate";
+
+type SortDir = "asc" | "desc";
+
+type SortState = { key: SortKey; dir: SortDir };
+
+/** 기본: 상위부서 → 부서 → 파트 → 직위 오름차순 */
+const DEFAULT_SORT_KEYS: SortKey[] = [
+  "division",
+  "department",
+  "part",
+  "title",
+];
+
+function catalogIndex(list: readonly string[], value: string) {
+  const i = (list as readonly string[]).indexOf(value);
+  return i >= 0 ? i : 10_000;
+}
+
+function compareSortField(
+  a: EmployeeRosterRecord,
+  b: EmployeeRosterRecord,
+  key: SortKey,
+): number {
+  switch (key) {
+    case "division": {
+      const byCat =
+        catalogIndex(EMPLOYEE_DIVISIONS, a.division) -
+        catalogIndex(EMPLOYEE_DIVISIONS, b.division);
+      return byCat || (a.division || "").localeCompare(b.division || "", "ko");
+    }
+    case "department": {
+      const da = normalizeDepartment(a.department);
+      const db = normalizeDepartment(b.department);
+      const byCat =
+        catalogIndex(EMPLOYEE_DEPARTMENTS, da) -
+        catalogIndex(EMPLOYEE_DEPARTMENTS, db);
+      return byCat || da.localeCompare(db, "ko");
+    }
+    case "part": {
+      const pa = (a.part || "").trim();
+      const pb = (b.part || "").trim();
+      if (!pa && pb) return 1;
+      if (pa && !pb) return -1;
+      const byCat =
+        catalogIndex(EMPLOYEE_PARTS, pa) - catalogIndex(EMPLOYEE_PARTS, pb);
+      return byCat || pa.localeCompare(pb, "ko");
+    }
+    case "empNo":
+      return (a.empNo || "").localeCompare(b.empNo || "", "ko", {
+        numeric: true,
+      });
+    case "name":
+      return (a.name || "").localeCompare(b.name || "", "ko");
+    case "title": {
+      const byCat =
+        catalogIndex(EMPLOYEE_TITLES, a.title) -
+        catalogIndex(EMPLOYEE_TITLES, b.title);
+      return byCat || (a.title || "").localeCompare(b.title || "", "ko");
+    }
+    case "jobRole": {
+      const byCat =
+        catalogIndex(EMPLOYEE_JOB_ROLES, a.jobRole) -
+        catalogIndex(EMPLOYEE_JOB_ROLES, b.jobRole);
+      return byCat || (a.jobRole || "").localeCompare(b.jobRole || "", "ko");
+    }
+    case "jobTrack": {
+      const byCat =
+        catalogIndex(EMPLOYEE_JOB_TRACKS, a.jobTrack) -
+        catalogIndex(EMPLOYEE_JOB_TRACKS, b.jobTrack);
+      return byCat || (a.jobTrack || "").localeCompare(b.jobTrack || "", "ko");
+    }
+    case "gender":
+      return (a.gender || "").localeCompare(b.gender || "", "ko");
+    case "titleYears":
+      return (a.titleYears || 0) - (b.titleYears || 0);
+    case "salary":
+      return (a.salary || 0) - (b.salary || 0);
+    case "contractSalary":
+      return (a.contractSalary || 0) - (b.contractSalary || 0);
+    case "groupHireDate":
+      return (a.groupHireDate || "").localeCompare(b.groupHireDate || "");
+    case "hireDate":
+      return (a.hireDate || "").localeCompare(b.hireDate || "");
+    default:
+      return 0;
+  }
+}
+
+function sortRosterRows(
+  rows: EmployeeRosterRecord[],
+  sort: SortState | null,
+): EmployeeRosterRecord[] {
+  const keys = sort ? [sort.key, ...DEFAULT_SORT_KEYS, "name" as SortKey] : [
+    ...DEFAULT_SORT_KEYS,
+    "name" as SortKey,
+  ];
+  const uniqueKeys = [...new Set(keys)];
+  return [...rows].sort((a, b) => {
+    for (const key of uniqueKeys) {
+      let cmp = compareSortField(a, b, key);
+      if (sort && key === sort.key && sort.dir === "desc") cmp = -cmp;
+      if (cmp !== 0) return cmp;
+    }
+    return 0;
+  });
+}
 
 function emptyForm(): FormState {
   return {
@@ -305,6 +430,91 @@ function ColumnFilter({
   );
 }
 
+function SortToggle({
+  sortKey,
+  sort,
+  onToggle,
+}: {
+  sortKey: SortKey;
+  sort: SortState | null;
+  onToggle: (key: SortKey) => void;
+}) {
+  const active = sort?.key === sortKey;
+  return (
+    <button
+      type="button"
+      className={cn(
+        "inline-flex rounded p-0.5 hover:bg-white/15",
+        active ? "text-amber-200" : "opacity-70",
+      )}
+      title={
+        active
+          ? sort?.dir === "asc"
+            ? "오름차순 · 클릭 시 내림차순"
+            : "내림차순 · 클릭 시 기본 정렬"
+          : "클릭 시 오름차순 정렬"
+      }
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle(sortKey);
+      }}
+    >
+      {active ? (
+        sort?.dir === "asc" ? (
+          <ArrowUp className="size-3.5" />
+        ) : (
+          <ArrowDown className="size-3.5" />
+        )
+      ) : (
+        <ArrowUpDown className="size-3.5" />
+      )}
+    </button>
+  );
+}
+
+function SortableHeader({
+  label,
+  sortKey,
+  sort,
+  onToggle,
+  filter,
+}: {
+  label: string;
+  sortKey: SortKey;
+  sort: SortState | null;
+  onToggle: (key: SortKey) => void;
+  filter?: {
+    options: readonly string[];
+    selected: string[];
+    onChange: (next: string[]) => void;
+  };
+}) {
+  return (
+    <th className="px-1 py-2">
+      <div className="inline-flex items-center gap-0.5">
+        {filter ? (
+          <ColumnFilter
+            label={label}
+            options={filter.options}
+            selected={filter.selected}
+            onChange={filter.onChange}
+          />
+        ) : (
+          <button
+            type="button"
+            className="px-1 font-semibold hover:underline"
+            title={`${label} 정렬`}
+            onClick={() => onToggle(sortKey)}
+          >
+            {label}
+          </button>
+        )}
+        <SortToggle sortKey={sortKey} sort={sort} onToggle={onToggle} />
+      </div>
+    </th>
+  );
+}
+
 export function EmployeeRosterPanel() {
   const list = useEmployees();
   const { isAdmin } = useCurrentUser();
@@ -315,6 +525,8 @@ export function EmployeeRosterPanel() {
   const [draft, setDraft] = useState<EmployeeRosterRecord[] | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
   const [filters, setFilters] = useState<FiltersState>(EMPTY_FILTERS);
+  /** null이면 상위부서→부서→파트→직위 기본 오름차순 */
+  const [sort, setSort] = useState<SortState | null>(null);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
 
@@ -354,7 +566,7 @@ export function EmployeeRosterPanel() {
   }, [working]);
 
   const displayed = useMemo(() => {
-    return working.filter((row) =>
+    const filtered = working.filter((row) =>
       FILTERABLE.every(({ key }) => {
         const selected = filters[key];
         if (!selected.length) return true;
@@ -366,12 +578,21 @@ export function EmployeeRosterPanel() {
         return selected.includes(String(row[key] ?? ""));
       }),
     );
-  }, [working, filters]);
+    return sortRosterRows(filtered, sort);
+  }, [working, filters, sort]);
 
   const hasActiveFilters = FILTERABLE.some(({ key }) => filters[key].length > 0);
 
   function setFilter(key: FilterKey, next: string[]) {
     setFilters((prev) => ({ ...prev, [key]: next }));
+  }
+
+  function toggleSort(key: SortKey) {
+    setSort((prev) => {
+      if (!prev || prev.key !== key) return { key, dir: "asc" };
+      if (prev.dir === "asc") return { key, dir: "desc" };
+      return null;
+    });
   }
 
   function startEdit() {
@@ -1003,37 +1224,85 @@ export function EmployeeRosterPanel() {
           <thead>
             <tr className="bg-dh-deep text-white">
               {FILTERABLE.slice(0, 2).map(({ key, label }) => (
-                <th key={key} className="px-1 py-2">
-                  <ColumnFilter
-                    label={label}
-                    options={filterOptions[key]}
-                    selected={filters[key]}
-                    onChange={(next) => setFilter(key, next)}
-                  />
-                </th>
+                <SortableHeader
+                  key={key}
+                  label={label}
+                  sortKey={key}
+                  sort={sort}
+                  onToggle={toggleSort}
+                  filter={{
+                    options: filterOptions[key],
+                    selected: filters[key],
+                    onChange: (next) => setFilter(key, next),
+                  }}
+                />
               ))}
-              <th className="px-2 py-2">파트</th>
-              <th className="px-2 py-2">사번</th>
-              <th className="px-2 py-2">성명</th>
+              <SortableHeader
+                label="파트"
+                sortKey="part"
+                sort={sort}
+                onToggle={toggleSort}
+              />
+              <SortableHeader
+                label="사번"
+                sortKey="empNo"
+                sort={sort}
+                onToggle={toggleSort}
+              />
+              <SortableHeader
+                label="성명"
+                sortKey="name"
+                sort={sort}
+                onToggle={toggleSort}
+              />
               {FILTERABLE.slice(2).map(({ key, label }) => (
-                <th key={key} className="px-1 py-2">
-                  <ColumnFilter
-                    label={label}
-                    options={filterOptions[key]}
-                    selected={filters[key]}
-                    onChange={(next) => setFilter(key, next)}
-                  />
-                </th>
+                <SortableHeader
+                  key={key}
+                  label={label}
+                  sortKey={key}
+                  sort={sort}
+                  onToggle={toggleSort}
+                  filter={{
+                    options: filterOptions[key],
+                    selected: filters[key],
+                    onChange: (next) => setFilter(key, next),
+                  }}
+                />
               ))}
-              <th className="px-2 py-2">직위년차</th>
+              <SortableHeader
+                label="직위년차"
+                sortKey="titleYears"
+                sort={sort}
+                onToggle={toggleSort}
+              />
               {canViewSalary ? (
                 <>
-                  <th className="px-2 py-2">연봉(전년)</th>
-                  <th className="px-2 py-2">계약연봉(당년)</th>
+                  <SortableHeader
+                    label="연봉(전년)"
+                    sortKey="salary"
+                    sort={sort}
+                    onToggle={toggleSort}
+                  />
+                  <SortableHeader
+                    label="계약연봉(당년)"
+                    sortKey="contractSalary"
+                    sort={sort}
+                    onToggle={toggleSort}
+                  />
                 </>
               ) : null}
-              <th className="px-2 py-2">그룹입사</th>
-              <th className="px-2 py-2">입사</th>
+              <SortableHeader
+                label="그룹입사"
+                sortKey="groupHireDate"
+                sort={sort}
+                onToggle={toggleSort}
+              />
+              <SortableHeader
+                label="입사"
+                sortKey="hireDate"
+                sort={sort}
+                onToggle={toggleSort}
+              />
               <th className="px-2 py-2" />
             </tr>
           </thead>

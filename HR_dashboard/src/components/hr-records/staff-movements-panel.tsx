@@ -149,9 +149,9 @@ export function StaffMovementsPanel() {
           if (!matchesMulti(filters.title, m.title)) return false;
           return true;
         })
-        // 입사자=입사일, 퇴사자=퇴사일 (둘 다 eventDate) · 최신순
+        // 입사자=입사일, 퇴사자=퇴사일 (둘 다 eventDate) · 오름차순
         .sort((a, b) => {
-          const byDate = b.eventDate.localeCompare(a.eventDate);
+          const byDate = (a.eventDate || "").localeCompare(b.eventDate || "");
           if (byDate !== 0) return byDate;
           return (a.name || "").localeCompare(b.name || "", "ko");
         }),
@@ -566,7 +566,7 @@ export function StaffMovementsPanel() {
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
             입사·퇴사를 등록하면 HR 대시보드에 반영됩니다. 입사자는 입사일·퇴사자는
-            퇴사일 최신순이며, 상위부서·부서·직군·직위 헤더에서 복수 필터할 수
+            퇴사일 오름차순이며, 상위부서·부서·직군·직위 헤더에서 복수 필터할 수
             있습니다.
           </p>
           {editing ? (
@@ -675,7 +675,7 @@ export function StaffMovementsPanel() {
             className="min-h-[7rem] w-full rounded-md border border-border bg-background p-2 font-mono text-xs"
             value={pasteText}
             onChange={(e) => setPasteText(e.target.value)}
-            placeholder="성명	사번	상위부서	부서	직군	직위	성별	입사일/퇴사일	퇴사사유	비고"
+            placeholder="성명	사번	상위부서	부서	직군	직위	성별	입사일	퇴사일	퇴사사유	비고"
           />
           <div className="mt-2 flex gap-2">
             <Button size="sm" onClick={applyPaste}>
@@ -807,6 +807,18 @@ export function StaffMovementsPanel() {
             ))}
           </select>
         </div>
+        {kind === "leave" ? (
+          <div className="grid gap-1">
+            <Label>입사일 (근속용)</Label>
+            <Input
+              type="date"
+              value={form.hireDate}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, hireDate: e.target.value }))
+              }
+            />
+          </div>
+        ) : null}
         <div className="grid gap-1">
           <Label>{kind === "hire" ? "입사일" : "퇴사일"}</Label>
           <Input
@@ -818,34 +830,22 @@ export function StaffMovementsPanel() {
           />
         </div>
         {kind === "leave" ? (
-          <>
-            <div className="grid gap-1">
-              <Label>입사일 (근속용)</Label>
-              <Input
-                type="date"
-                value={form.hireDate}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, hireDate: e.target.value }))
-                }
-              />
-            </div>
-            <div className="grid gap-1">
-              <Label>퇴사사유</Label>
-              <select
-                className={selectClass}
-                value={form.leaveReason}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, leaveReason: e.target.value }))
-                }
-              >
-                {LEAVE_REASONS.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </>
+          <div className="grid gap-1">
+            <Label>퇴사사유</Label>
+            <select
+              className={selectClass}
+              value={form.leaveReason}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, leaveReason: e.target.value }))
+              }
+            >
+              {LEAVE_REASONS.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </div>
         ) : null}
         <div className="grid gap-1">
           <Label>비고</Label>
@@ -911,14 +911,14 @@ export function StaffMovementsPanel() {
               <HeaderFilter filterKey="jobTrack" label="직군" />
               <HeaderFilter filterKey="title" label="직위" />
               <th className="px-2 py-2">성별</th>
+              {kind === "leave" ? (
+                <th className="px-2 py-2">입사일</th>
+              ) : null}
               <th className="px-2 py-2">
                 {kind === "hire" ? "입사일" : "퇴사일"}
               </th>
               {kind === "leave" ? (
-                <>
-                  <th className="px-2 py-2">입사일</th>
-                  <th className="px-2 py-2">퇴사사유</th>
-                </>
+                <th className="px-2 py-2">퇴사사유</th>
               ) : null}
               <th className="px-2 py-2">비고</th>
               <th className="px-2 py-2" />
@@ -979,6 +979,22 @@ export function StaffMovementsPanel() {
                   <td className="px-2 py-1.5">{m.jobTrack}</td>
                   <td className="px-2 py-1.5">{m.title}</td>
                   <td className="px-2 py-1.5">{m.gender}</td>
+                  {kind === "leave" ? (
+                    <td className="px-2 py-1.5">
+                      {editing ? (
+                        <Input
+                          type="date"
+                          className="h-8 text-sm"
+                          value={m.hireDate || ""}
+                          onChange={(e) =>
+                            patchRow(m.id, { hireDate: e.target.value })
+                          }
+                        />
+                      ) : (
+                        m.hireDate || "—"
+                      )}
+                    </td>
+                  ) : null}
                   <td className="px-2 py-1.5">
                     {editing ? (
                       <Input
@@ -994,30 +1010,27 @@ export function StaffMovementsPanel() {
                     )}
                   </td>
                   {kind === "leave" ? (
-                    <>
-                      <td className="px-2 py-1.5">{m.hireDate || "—"}</td>
-                      <td className="px-2 py-1.5">
-                        {editing ? (
-                          <select
-                            className={selectClass}
-                            value={String(m.leaveReason ?? "기타")}
-                            onChange={(e) =>
-                              patchRow(m.id, {
-                                leaveReason: e.target.value,
-                              })
-                            }
-                          >
-                            {LEAVE_REASONS.map((r) => (
-                              <option key={r} value={r}>
-                                {r}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          m.leaveReason || "—"
-                        )}
-                      </td>
-                    </>
+                    <td className="px-2 py-1.5">
+                      {editing ? (
+                        <select
+                          className={selectClass}
+                          value={String(m.leaveReason ?? "기타")}
+                          onChange={(e) =>
+                            patchRow(m.id, {
+                              leaveReason: e.target.value,
+                            })
+                          }
+                        >
+                          {LEAVE_REASONS.map((r) => (
+                            <option key={r} value={r}>
+                              {r}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        m.leaveReason || "—"
+                      )}
+                    </td>
                   ) : null}
                   <td className="px-2 py-1.5 text-muted-foreground">
                     {m.note}

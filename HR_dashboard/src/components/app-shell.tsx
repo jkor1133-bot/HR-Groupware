@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BookUser,
+  BriefcaseBusiness,
   CalendarDays,
+  ChevronDown,
   ClipboardList,
+  ContactRound,
   FolderKanban,
   GitBranch,
   Home,
@@ -28,8 +31,11 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { useMembers } from "@/hooks/use-members";
 import { useViewPrefs } from "@/hooks/use-view-prefs";
 import {
+  APP_MENU_GROUPS,
   APP_MENUS,
   canAccessMenu,
+  type AppMenuDef,
+  type AppMenuGroupId,
   type AppMenuId,
 } from "@/lib/app-menus";
 import { cn } from "@/lib/utils";
@@ -45,8 +51,101 @@ const MENU_ICONS: Record<AppMenuId, LucideIcon> = {
   "/members": Users,
 };
 
+const GROUP_ICONS: Partial<Record<AppMenuGroupId, LucideIcon>> = {
+  work: BriefcaseBusiness,
+  hr: ContactRound,
+};
+
+type VisibleMenu = AppMenuDef & { icon: LucideIcon };
+
+type VisibleGroup = {
+  id: AppMenuGroupId;
+  label: string;
+  shortLabel?: string;
+  collapsible?: boolean;
+  pinBottom?: boolean;
+  menus: VisibleMenu[];
+};
+
 function isActivePath(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
+}
+
+function groupHasActive(group: VisibleGroup, pathname: string) {
+  return group.menus.some((m) => isActivePath(pathname, m.href));
+}
+
+function SidebarLabel({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "min-w-0 flex-1 truncate whitespace-nowrap opacity-0 transition-[opacity,max-width] duration-150 max-w-0 overflow-hidden group-hover/sidebar:max-w-[9rem] group-hover/sidebar:opacity-100",
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function MenuLink({
+  item,
+  pathname,
+  compact,
+  nested,
+}: {
+  item: VisibleMenu;
+  pathname: string;
+  compact?: boolean;
+  nested?: boolean;
+}) {
+  const Icon = item.icon;
+  const active = isActivePath(pathname, item.href);
+  if (compact) {
+    return (
+      <Link
+        href={item.href}
+        aria-label={item.label}
+        aria-current={active ? "page" : undefined}
+        className={cn(
+          "flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 text-[9px] leading-tight transition",
+          active
+            ? "text-dh-real dark:text-dh-sky"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        <Icon
+          className={cn("size-[1.15rem]", active && "stroke-[2.25]")}
+          strokeWidth={1.75}
+        />
+        <span className="w-full truncate text-center">{item.label}</span>
+      </Link>
+    );
+  }
+  return (
+    <Link
+      href={item.href}
+      title={item.label}
+      aria-label={item.label}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex w-full items-center justify-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] font-medium transition group-hover/sidebar:justify-start",
+        nested && "group-hover/sidebar:pl-3",
+        active
+          ? "bg-white/15 text-white"
+          : "text-white/70 hover:bg-white/10 hover:text-white",
+      )}
+    >
+      <Icon className="size-4 shrink-0" strokeWidth={1.75} />
+      <SidebarLabel>{item.label}</SidebarLabel>
+    </Link>
+  );
 }
 
 function ViewToolbar() {
@@ -197,18 +296,28 @@ function CurrentUserChip() {
   );
 }
 
-function useVisibleMenus() {
+function useVisibleMenuGroups() {
   const { currentMember, isAdmin, hydrated } = useCurrentUser();
   return useMemo(() => {
-    const base = !hydrated
-      ? APP_MENUS
-      : APP_MENUS.filter((m) =>
-          canAccessMenu(isAdmin, currentMember?.allowedMenus, m.href),
-        );
-    return base.map((m) => ({
-      ...m,
-      icon: MENU_ICONS[m.href],
-    }));
+    const allowed = (href: AppMenuId) =>
+      !hydrated || canAccessMenu(isAdmin, currentMember?.allowedMenus, href);
+
+    const groups: VisibleGroup[] = [];
+    for (const group of APP_MENU_GROUPS) {
+      const menus = group.menus
+        .filter((m) => allowed(m.href))
+        .map((m) => ({ ...m, icon: MENU_ICONS[m.href] }));
+      if (!menus.length) continue;
+      groups.push({
+        id: group.id,
+        label: group.label,
+        shortLabel: group.shortLabel,
+        collapsible: group.collapsible,
+        pinBottom: group.pinBottom,
+        menus,
+      });
+    }
+    return groups;
   }, [
     hydrated,
     isAdmin,
@@ -216,6 +325,69 @@ function useVisibleMenus() {
     currentMember?.isAdmin,
     currentMember?.allowedMenus,
   ]);
+}
+
+function SidebarGroupNav({
+  group,
+  pathname,
+  open,
+  onToggle,
+}: {
+  group: VisibleGroup;
+  pathname: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  if (!group.collapsible || !group.label) {
+    return (
+      <div className="flex w-full flex-col gap-0.5 px-1">
+        {group.menus.map((item) => (
+          <MenuLink key={item.href} item={item} pathname={pathname} />
+        ))}
+      </div>
+    );
+  }
+
+  const GroupIcon = GROUP_ICONS[group.id] ?? BriefcaseBusiness;
+  const active = groupHasActive(group, pathname);
+
+  return (
+    <div className="flex w-full flex-col gap-0.5 px-1">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        title={group.label}
+        className={cn(
+          "flex w-full items-center justify-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] font-semibold transition group-hover/sidebar:justify-start",
+          active || open
+            ? "bg-white/10 text-white"
+            : "text-white/75 hover:bg-white/10 hover:text-white",
+        )}
+      >
+        <GroupIcon className="size-4 shrink-0" strokeWidth={1.75} />
+        <SidebarLabel>{group.label}</SidebarLabel>
+        <ChevronDown
+          className={cn(
+            "size-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-150 group-hover/sidebar:opacity-70",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+      {open ? (
+        <div className="flex flex-col gap-0.5 group-hover/sidebar:ml-2 group-hover/sidebar:border-l group-hover/sidebar:border-white/15 group-hover/sidebar:pl-1.5">
+          {group.menus.map((item) => (
+            <MenuLink
+              key={item.href}
+              item={item}
+              pathname={pathname}
+              nested
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function useMenuGuard() {
@@ -246,8 +418,47 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { viewMode } = useViewPrefs();
   const isMobile = viewMode === "mobile";
-  const sideNav = useVisibleMenus();
+  const menuGroups = useVisibleMenuGroups();
+  const mainGroups = menuGroups.filter((g) => !g.pinBottom);
+  const bottomGroups = menuGroups.filter((g) => g.pinBottom);
+  const [openGroups, setOpenGroups] = useState<
+    Partial<Record<AppMenuGroupId, boolean>>
+  >({});
+  const [mobileSheet, setMobileSheet] = useState<VisibleGroup | null>(null);
   useMenuGuard();
+
+  useEffect(() => {
+    setOpenGroups((prev) => {
+      const next = { ...prev };
+      for (const group of menuGroups) {
+        if (!group.collapsible) continue;
+        if (groupHasActive(group, pathname)) next[group.id] = true;
+      }
+      return next;
+    });
+    setMobileSheet(null);
+  }, [pathname, menuGroups]);
+
+  function toggleGroup(id: AppMenuGroupId) {
+    setOpenGroups((prev) => {
+      const currently =
+        prev[id] ??
+        groupHasActive(
+          menuGroups.find((g) => g.id === id) ?? {
+            id,
+            label: "",
+            menus: [],
+          },
+          pathname,
+        );
+      return { ...prev, [id]: !currently };
+    });
+  }
+
+  function isGroupOpen(group: VisibleGroup) {
+    if (openGroups[group.id] !== undefined) return Boolean(openGroups[group.id]);
+    return groupHasActive(group, pathname);
+  }
 
   if (isMobile) {
     return (
@@ -278,34 +489,82 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="mx-auto w-full">{children}</div>
           </main>
 
+          {mobileSheet ? (
+            <div className="absolute inset-x-0 bottom-14 z-40 border-t border-border bg-card/98 p-2 shadow-lg backdrop-blur-md">
+              <p className="mb-1.5 px-2 text-xs font-semibold text-dh-deep dark:text-dh-light">
+                {mobileSheet.label}
+              </p>
+              <div className="grid grid-cols-2 gap-1">
+                {mobileSheet.menus.map((item) => {
+                  const Icon = item.icon;
+                  const active = isActivePath(pathname, item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMobileSheet(null)}
+                      className={cn(
+                        "flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm",
+                        active
+                          ? "bg-dh-deep/10 font-medium text-dh-real"
+                          : "text-foreground hover:bg-muted",
+                      )}
+                    >
+                      <Icon className="size-4 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
           <nav className="absolute inset-x-0 bottom-0 z-40 flex h-14 items-stretch border-t border-border/80 bg-card/95 backdrop-blur-md sm:rounded-b-[1.75rem]">
-            {sideNav.map((item) => {
-              const Icon = item.icon;
-              const active = isActivePath(pathname, item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-label={item.label}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 text-[9px] leading-tight transition",
-                    active
-                      ? "text-dh-real dark:text-dh-sky"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  <Icon
+            {menuGroups.map((group) => {
+              if (group.collapsible && group.label) {
+                const GroupIcon = GROUP_ICONS[group.id] ?? BriefcaseBusiness;
+                const active =
+                  groupHasActive(group, pathname) ||
+                  mobileSheet?.id === group.id;
+                return (
+                  <button
+                    key={group.id}
+                    type="button"
+                    aria-label={group.label}
+                    onClick={() =>
+                      setMobileSheet((prev) =>
+                        prev?.id === group.id ? null : group,
+                      )
+                    }
                     className={cn(
-                      "size-[1.15rem]",
-                      active && "stroke-[2.25]",
+                      "flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 text-[9px] leading-tight transition",
+                      active
+                        ? "text-dh-real dark:text-dh-sky"
+                        : "text-muted-foreground hover:text-foreground",
                     )}
-                    strokeWidth={1.75}
-                  />
-                  <span className="w-full truncate text-center">
-                    {item.label}
-                  </span>
-                </Link>
+                  >
+                    <GroupIcon
+                      className={cn(
+                        "size-[1.15rem]",
+                        active && "stroke-[2.25]",
+                      )}
+                      strokeWidth={1.75}
+                    />
+                    <span className="w-full truncate text-center">
+                      {group.shortLabel || group.label}
+                    </span>
+                  </button>
+                );
+              }
+              const item = group.menus[0];
+              if (!item) return null;
+              return (
+                <MenuLink
+                  key={item.href}
+                  item={item}
+                  pathname={pathname}
+                  compact
+                />
               );
             })}
           </nav>
@@ -340,45 +599,62 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="sticky top-14 z-30 flex h-[calc(100vh-3.5rem)] w-[3.5rem] shrink-0 flex-col items-center bg-dh-deep py-3 sm:top-16 sm:h-[calc(100vh-4rem)] sm:w-16">
-          <nav className="flex flex-1 flex-col items-center gap-1">
-            {sideNav.map((item) => {
-              const Icon = item.icon;
-              const active = isActivePath(pathname, item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  title={item.label}
-                  aria-label={item.label}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "flex size-10 flex-col items-center justify-center rounded-lg transition sm:size-11",
-                    active
-                      ? "bg-white/15 text-white"
-                      : "text-white/55 hover:bg-white/10 hover:text-white",
-                  )}
-                >
-                  <Icon className="size-5" strokeWidth={1.75} />
-                </Link>
-              );
-            })}
+        <aside
+          className="group/sidebar sticky top-14 z-30 flex h-[calc(100vh-3.5rem)] w-14 shrink-0 flex-col overflow-x-hidden bg-dh-deep py-3 transition-[width] duration-200 ease-out hover:w-[11.5rem] sm:top-16 sm:h-[calc(100vh-4rem)] sm:w-16 sm:hover:w-48"
+        >
+          <nav className="flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden">
+            {mainGroups.map((group, groupIndex) => (
+              <div key={group.id} className="flex w-full flex-col">
+                {groupIndex > 0 ? (
+                  <div
+                    className="mx-2 my-1.5 h-px bg-white/15 group-hover/sidebar:mx-3"
+                    aria-hidden
+                  />
+                ) : null}
+                <SidebarGroupNav
+                  group={group}
+                  pathname={pathname}
+                  open={isGroupOpen(group)}
+                  onToggle={() => toggleGroup(group.id)}
+                />
+              </div>
+            ))}
           </nav>
-          <Link
-            href="/settings"
-            title="설정 · 홈화면 편집"
-            aria-label="설정"
-            aria-current={pathname.startsWith("/settings") ? "page" : undefined}
-            className={cn(
-              "mb-2 mt-auto flex flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-2 transition",
-              pathname.startsWith("/settings")
-                ? "bg-white/15 text-white"
-                : "text-white/55 hover:bg-white/10 hover:text-white",
-            )}
-          >
-            <Settings2 className="size-5" strokeWidth={1.75} />
-            <span className="text-[10px] font-medium tracking-tight">설정</span>
-          </Link>
+
+          <div className="mt-auto flex w-full flex-col gap-1 pt-2">
+            <div
+              className="mx-2 mb-1 h-px bg-white/15 group-hover/sidebar:mx-3"
+              aria-hidden
+            />
+            {bottomGroups.map((group) => (
+              <SidebarGroupNav
+                key={group.id}
+                group={group}
+                pathname={pathname}
+                open={false}
+                onToggle={() => undefined}
+              />
+            ))}
+            <div className="px-1 pb-1">
+              <Link
+                href="/settings"
+                title="설정 · 홈화면 편집"
+                aria-label="설정"
+                aria-current={
+                  pathname.startsWith("/settings") ? "page" : undefined
+                }
+                className={cn(
+                  "flex w-full items-center justify-center gap-2 rounded-lg px-2 py-2 text-[13px] font-medium transition group-hover/sidebar:justify-start",
+                  pathname.startsWith("/settings")
+                    ? "bg-white/15 text-white"
+                    : "text-white/70 hover:bg-white/10 hover:text-white",
+                )}
+              >
+                <Settings2 className="size-4 shrink-0" strokeWidth={1.75} />
+                <SidebarLabel>설정</SidebarLabel>
+              </Link>
+            </div>
+          </div>
         </aside>
 
         <main className="@container/app min-w-0 flex-1 overflow-auto p-3 sm:p-4 lg:px-5 lg:py-5 xl:px-6">

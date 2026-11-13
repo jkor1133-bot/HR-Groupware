@@ -9,6 +9,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { useMembers } from "@/hooks/use-members";
 import {
   ALL_MENU_HREFS,
+  APP_MENU_GROUPS,
   APP_MENUS,
   DEFAULT_MEMBER_MENUS,
   canAccessHrSub,
@@ -622,21 +623,43 @@ export default function MembersPage() {
           <table className="gw-data-table w-full min-w-[52rem] text-sm">
             <thead>
               <tr className="bg-dh-deep text-white">
-                <th className="sticky left-0 z-10 bg-dh-deep px-4 py-2.5">
+                <th
+                  rowSpan={2}
+                  className="sticky left-0 z-10 bg-dh-deep px-4 py-2.5 align-middle"
+                >
                   담당자
                 </th>
-                <th className="px-2 py-2.5 text-center text-xs">관리자</th>
+                <th
+                  rowSpan={2}
+                  className="px-2 py-2.5 text-center text-xs align-middle"
+                >
+                  관리자
+                </th>
+                {APP_MENU_GROUPS.map((group) => (
+                  <th
+                    key={group.id}
+                    colSpan={group.menus.length}
+                    className="border-l border-white/15 px-2 py-1.5 text-center text-[11px] font-medium text-white/85"
+                  >
+                    {group.label || group.menus[0]?.label}
+                  </th>
+                ))}
+                <th
+                  rowSpan={2}
+                  className="border-l border-white/15 px-2 py-2.5 text-center text-xs font-medium align-middle"
+                >
+                  승진현황
+                </th>
+              </tr>
+              <tr className="bg-dh-deep text-white">
                 {APP_MENUS.map((menu) => (
                   <th
                     key={menu.href}
-                    className="px-2 py-2.5 text-center text-xs font-medium"
+                    className="border-l border-white/10 px-2 py-2 text-center text-xs font-medium"
                   >
                     {menu.label}
                   </th>
                 ))}
-                <th className="px-2 py-2.5 text-center text-xs font-medium">
-                  승진현황
-                </th>
               </tr>
             </thead>
             <tbody>
