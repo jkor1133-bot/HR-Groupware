@@ -543,6 +543,30 @@ export type PolicyMemoRecord = {
   note: string;
 };
 
+/** 조직도 한 단위 (상위부서·부서·파트) */
+export type OrgChartUnit = {
+  id: string;
+  division: string;
+  department: string;
+  part: string;
+  /** 본부장·팀장 등 */
+  leader: string;
+  note: string;
+};
+
+/** 조직개편 이력 1건 — 시행 시점의 조직 구성 */
+export type OrgChartRevision = {
+  id: string;
+  /** 시행일 */
+  effectiveDate: string;
+  /** 개편 제목 */
+  title: string;
+  /** 개편 요약·사유 */
+  summary: string;
+  note: string;
+  units: OrgChartUnit[];
+};
+
 /** 그룹사 임원 차량 지급 기준 한 행 */
 export type ExecVehiclePolicyRow = {
   id: string;

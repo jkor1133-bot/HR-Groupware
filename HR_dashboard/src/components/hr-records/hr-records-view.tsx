@@ -9,6 +9,7 @@ import { PermitsDbPanel } from "@/components/hr-records/permits-db-panel";
 import { CompanyVehiclePolicyPanel } from "@/components/hr-records/company-vehicle-policy-panel";
 import { CongratulatoryPolicyPanel } from "@/components/hr-records/congratulatory-policy-panel";
 import { ExecVehiclePolicyPanel } from "@/components/hr-records/exec-vehicle-policy-panel";
+import { OrgChartPanel } from "@/components/hr-records/org-chart-panel";
 import { PayBandPanel } from "@/components/hr-records/pay-band-panel";
 import { StaffCongratulatoryPolicyPanel } from "@/components/hr-records/staff-congratulatory-policy-panel";
 import { PromotionHistoryPanel } from "@/components/hr-records/promotion-history-panel";
@@ -52,6 +53,7 @@ const SUB_TABS: Record<MainTab, SubTab[]> = {
     { id: "promotions", label: "승진현황" },
     { id: "staff-movements", label: "입퇴사자 현황" },
     { id: "pay-bands", label: "Pay-Band 현황" },
+    { id: "org-chart", label: "조직도 현황" },
     { id: "contracts", label: "계약직 현황" },
   ],
   ga: [
@@ -220,6 +222,9 @@ export function HrRecordsView({
         );
       case "pay-bands":
         return <PayBandPanel />;
+      case "org-chart":
+      case "organization":
+        return <OrgChartPanel />;
       case "contracts":
       case "contracts-db":
       case "contractors":
